@@ -11,7 +11,11 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
-        "fastify": "^4.24.3"
+        "@fastify/cors": "^11.1.0",
+        "@fastify/jwt": "^10.0.0",
+        "fastify": "^5.6.0",
+        "fastify-keycloak-adapter": "^3.0.2",
+        "jsonwebtoken": "^9.0.2"
     },
     "devDependencies": {
         "@types/node": "^20.10.0",
