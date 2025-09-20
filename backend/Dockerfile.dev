@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Установка зависимостей
+COPY package*.json ./
+RUN npm ci
+
+# Установка netcat для проверки доступности PostgreSQL
+RUN apk add --no-cache netcat-openbsd
+
+# Копирование исходного кода
+COPY . .
+
+EXPOSE 3000
+
+# Запуск в режиме разработки с автоперезагрузкой
+CMD ["npm", "run", "dev"]
