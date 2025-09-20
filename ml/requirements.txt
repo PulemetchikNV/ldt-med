@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+pillow
+torch
+torchvision
+monai
+nibabel
+numpy
+pydicom
+simpleitk

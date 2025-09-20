@@ -1,0 +1,35 @@
+/**
+ * Типы для работы с ML сервисом
+ */
+
+export interface MLPredictionResult {
+    prediction: string;
+    has_tumor: boolean;
+    mask_image?: string;
+    request_id?: string;
+    patient_id?: string;
+}
+
+export interface MLSliceData {
+    slice_data: string;
+    error?: string;
+}
+
+export interface MLPredictionError {
+    error: string;
+}
+
+export interface MLPredictZipResult {
+    message: string;
+    request_id: string;
+    patient_id: string;
+    has_tumor: boolean;
+    prediction: string;
+}
+
+export type VolumeType = 'original' | 'mask';
+
+export interface MLServiceConfig {
+    baseUrl: string;
+    timeout: number;
+}

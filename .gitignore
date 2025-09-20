@@ -30,6 +30,7 @@ uploads/*
 
 myvenv
 new_venv
+*/.venv_update/*
 tmp/
 .env
 

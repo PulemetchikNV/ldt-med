@@ -9,9 +9,38 @@
     </header>
     
     <main>
-      <div class="placeholder">
-        <h2>Добро пожаловать в систему AI анализа МРТ снимков</h2>
-        <p>Здесь будет интерфейс для загрузки и анализа 3D МРТ снимков</p>
+      <div class="dashboard-content">
+        <h2>Добро пожаловать в систему анализа медицинских изображений</h2>
+        <p>Система предоставляет возможности для анализа опухолей на основе ML алгоритмов</p>
+        
+        <div class="feature-cards">
+          <div class="feature-card">
+            <div class="card-icon">🧠</div>
+            <h3>ML Анализ</h3>
+            <p>Анализ медицинских изображений с помощью нейронных сетей</p>
+            <router-link to="/ml-analysis" class="card-button">
+              Перейти к анализу
+            </router-link>
+          </div>
+          
+          <div class="feature-card">
+            <div class="card-icon">📊</div>
+            <h3>Статистика</h3>
+            <p>Просмотр статистики и истории анализов</p>
+            <button class="card-button" disabled>
+              Скоро
+            </button>
+          </div>
+          
+          <div class="feature-card">
+            <div class="card-icon">⚙️</div>
+            <h3>Настройки</h3>
+            <p>Конфигурация системы и профиля пользователя</p>
+            <button class="card-button" disabled>
+              Скоро
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -63,23 +92,84 @@ main {
   padding: 40px 20px;
 }
 
-.placeholder {
-  max-width: 600px;
+.dashboard-content {
+  max-width: 1200px;
   margin: 0 auto;
   text-align: center;
-  padding: 60px 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
 }
 
-.placeholder h2 {
-  color: #333;
-  margin-bottom: 20px;
+.dashboard-content h2 {
+  color: #374151;
+  margin-bottom: 12px;
+  font-size: 28px;
 }
 
-.placeholder p {
-  color: #666;
+.dashboard-content > p {
+  color: #6b7280;
   font-size: 16px;
+  margin-bottom: 40px;
+}
+
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+  margin-top: 40px;
+}
+
+.feature-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 32px 24px;
+  text-align: center;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.card-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.feature-card h3 {
+  color: #374151;
+  margin-bottom: 12px;
+  font-size: 20px;
+}
+
+.feature-card p {
+  color: #6b7280;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+.card-button {
+  display: inline-block;
+  padding: 12px 24px;
+  background-color: #3b82f6;
+  color: white;
+  text-decoration: none;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.card-button:hover:not(:disabled) {
+  background-color: #2563eb;
+}
+
+.card-button:disabled {
+  background-color: #d1d5db;
+  color: #9ca3af;
+  cursor: not-allowed;
 }
 </style>
 

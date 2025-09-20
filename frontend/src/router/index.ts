@@ -3,6 +3,7 @@ import { useAuthStore } from '../stores/auth';
 import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
 import Dashboard from '../views/Dashboard.vue';
+import MLAnalysis from '../views/MLAnalysis.vue';
 
 const routes = [
     { path: '/', redirect: '/dashboard' },
@@ -11,6 +12,11 @@ const routes = [
     {
         path: '/dashboard',
         component: Dashboard,
+        meta: { requiresAuth: true }
+    },
+    {
+        path: '/ml-analysis',
+        component: MLAnalysis,
         meta: { requiresAuth: true }
     }
 ];

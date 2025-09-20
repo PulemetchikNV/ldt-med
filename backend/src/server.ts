@@ -1,8 +1,10 @@
 import Fastify, { FastifyInstance } from 'fastify';
 import jwt from '@fastify/jwt';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import healthcheckRoutes from './routes/healthcheck.js';
 import authRoutes from './routes/auth.js';
+import mlRoutes from './routes/ml.js';
 
 // Создаем экземпляр Fastify
 const fastify: FastifyInstance = Fastify({
@@ -16,6 +18,11 @@ fastify.register(cors, {
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 });
 fastify.register(jwt, { secret: 'supersecret' });
+fastify.register(multipart, {
+    limits: {
+        fileSize: 1000 * 1024 * 1024, // 1GB для медицинских файлов
+    }
+});
 
 // Добавляем декоратор для аутентификации
 fastify.decorate('authenticate', async function (request: any, reply: any) {
@@ -29,6 +36,7 @@ fastify.decorate('authenticate', async function (request: any, reply: any) {
 // Регистрируем роуты
 fastify.register(healthcheckRoutes, { prefix: '/api' });
 fastify.register(authRoutes, { prefix: '/api/auth' });
+fastify.register(mlRoutes, { prefix: '/api/ml' });
 
 // Запускаем сервер
 const start = async (): Promise<void> => {
