@@ -1,8 +1,8 @@
-import Fastify from 'fastify';
+import Fastify, { FastifyInstance } from 'fastify';
 import healthcheckRoutes from './routes/healthcheck.js';
 
 // Создаем экземпляр Fastify
-const fastify = Fastify({
+const fastify: FastifyInstance = Fastify({
     logger: true
 });
 
@@ -10,7 +10,7 @@ const fastify = Fastify({
 fastify.register(healthcheckRoutes, { prefix: '/api' });
 
 // Запускаем сервер
-const start = async () => {
+const start = async (): Promise<void> => {
     try {
         await fastify.listen({
             port: 3000,

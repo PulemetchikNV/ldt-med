@@ -9,6 +9,9 @@ RUN npm ci --only=production
 # Копирование исходного кода
 COPY . .
 
+# Сборка TypeScript
+RUN npm run build
+
 # Установка netcat для проверки доступности PostgreSQL
 RUN apk add --no-cache netcat-openbsd
 

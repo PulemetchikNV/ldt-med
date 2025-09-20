@@ -1,11 +1,42 @@
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+
+/**
+ * Интерфейс для ответа healthcheck
+ */
+interface HealthcheckResponse {
+    uptime: number;
+    message: string;
+    timestamp: string;
+    status: string;
+    version: string;
+}
+
+/**
+ * Интерфейс для детального ответа healthcheck
+ */
+interface DetailedHealthcheckResponse extends HealthcheckResponse {
+    system: {
+        platform: string;
+        nodeVersion: string;
+        memory: {
+            rss: string;
+            heapTotal: string;
+            heapUsed: string;
+            external: string;
+        };
+    };
+}
+
 /**
  * Роуты для проверки состояния сервера
  */
-
-export default async function healthcheckRoutes(fastify, options) {
+export default async function healthcheckRoutes(
+    fastify: FastifyInstance,
+    options: any
+): Promise<void> {
     // GET /health - проверка состояния сервера
-    fastify.get('/health', async (request, reply) => {
-        const healthcheck = {
+    fastify.get('/health', async (request: FastifyRequest, reply: FastifyReply) => {
+        const healthcheck: HealthcheckResponse = {
             uptime: process.uptime(),
             message: 'Сервер работает нормально',
             timestamp: new Date().toISOString(),
@@ -17,10 +48,10 @@ export default async function healthcheckRoutes(fastify, options) {
     });
 
     // GET /health/detailed - детальная проверка состояния
-    fastify.get('/health/detailed', async (request, reply) => {
+    fastify.get('/health/detailed', async (request: FastifyRequest, reply: FastifyReply) => {
         const memoryUsage = process.memoryUsage();
 
-        const healthcheck = {
+        const healthcheck: DetailedHealthcheckResponse = {
             uptime: process.uptime(),
             message: 'Детальная информация о состоянии сервера',
             timestamp: new Date().toISOString(),

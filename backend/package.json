@@ -2,19 +2,27 @@
     "name": "ldt-med-backend",
     "version": "1.0.0",
     "description": "Backend сервер для LDT Medical на Fastify",
-    "main": "server.js",
+    "main": "dist/server.js",
     "type": "module",
     "scripts": {
-        "start": "node server.js",
-        "dev": "node --watch server.js"
+        "build": "tsc",
+        "start": "node dist/server.js",
+        "dev": "tsx watch src/server.ts",
+        "type-check": "tsc --noEmit"
     },
     "dependencies": {
         "fastify": "^4.24.3"
     },
+    "devDependencies": {
+        "@types/node": "^20.10.0",
+        "tsx": "^4.6.0",
+        "typescript": "^5.3.0"
+    },
     "keywords": [
         "fastify",
         "api",
-        "medical"
+        "medical",
+        "typescript"
     ],
     "author": "",
     "license": "ISC"

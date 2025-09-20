@@ -3,21 +3,21 @@ version: '3.8'
 services:
   postgres:
     image: postgres:latest
-    container_name: ${PROJECT_NAME:-the-one-market}-postgres
+    container_name: ${PROJECT_NAME:-ldt-med}-postgres
     restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-chatdb}
+      POSTGRES_DB: ${POSTGRES_DB:-ldt_med_db}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - app-network
 
   pgadmin:
-    container_name: pgadmin4_container
+    container_name: ${PROJECT_NAME:-ldt-med}-pgadmin
     image: dpage/pgadmin4:7
     restart: always
     environment:
@@ -36,7 +36,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
-    container_name: ${PROJECT_NAME:-the-one-market}-backend-dev
+    container_name: ${PROJECT_NAME:-ldt-med}-backend-dev
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-3000}:3000"
@@ -44,7 +44,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-chatdb}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ldt_med_db}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - TRANSCRIPTION_URL=${TRANSCRIPTION_URL}
       - ENABLE_AI_RESPONSE=${ENABLE_AI_RESPONSE:-true}
@@ -67,7 +67,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
-    container_name: ${PROJECT_NAME:-the-one-market}-frontend-dev
+    container_name: ${PROJECT_NAME:-ldt-med}-frontend-dev
     restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-8080}:8080"
