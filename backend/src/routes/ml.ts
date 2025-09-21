@@ -47,6 +47,14 @@ export default async function mlRoutes(
 
             const result = await mlService.predictNifti(fileBuffer, filename);
 
+            // Проверяем, есть ли ошибка в ответе ML сервиса
+            if (result.error) {
+                return reply.code(400).send({
+                    error: 'Ошибка обработки ML сервиса',
+                    details: result.error
+                });
+            }
+
             return reply.code(200).send({
                 success: true,
                 data: result,
@@ -88,6 +96,14 @@ export default async function mlRoutes(
             fastify.log.info(`Обработка ZIP архива: ${filename}, размер: ${fileBuffer.length} байт`);
 
             const result = await mlService.predictZip(fileBuffer, filename);
+
+            // Проверяем, есть ли ошибка в ответе ML сервиса
+            if (result.error) {
+                return reply.code(400).send({
+                    error: 'Ошибка обработки ML сервиса',
+                    details: result.error
+                });
+            }
 
             return reply.code(200).send({
                 success: true,

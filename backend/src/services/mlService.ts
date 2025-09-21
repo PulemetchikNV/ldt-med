@@ -14,8 +14,8 @@ export class MLService {
     private config: MLServiceConfig;
 
     constructor(config: MLServiceConfig = {
-        baseUrl: process.env.ML_SERVICE_URL || 'http://ml:8000',
-        timeout: 300000 // 5 минут для обработки больших файлов
+        baseUrl: process.env['ML_SERVICE_URL'] || 'http://ml:8000',
+        timeout: Number(process.env['ML_TIMEOUT_MS'] || 1200000) // по умолчанию 20 минут
     }) {
         this.config = config;
     }
@@ -48,16 +48,23 @@ export class MLService {
      * Предсказание для ZIP архива с DICOM файлами
      */
     async predictZip(fileBuffer: Buffer, filename: string): Promise<MLPredictZipResult> {
-        const formData = new FormData();
-        formData.append('file', fileBuffer, {
-            filename,
-            contentType: 'application/zip'
-        });
+        // Создаем multipart/form-data вручную
+        const boundary = '----formdata-' + Math.random().toString(36).substring(2);
+        const body = Buffer.concat([
+            Buffer.from(`--${boundary}\r\n`),
+            Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"\r\n`),
+            Buffer.from(`Content-Type: application/zip\r\n\r\n`),
+            fileBuffer,
+            Buffer.from(`\r\n--${boundary}--\r\n`)
+        ]);
 
         const response = await fetch(`${this.config.baseUrl}/predict_zip`, {
             method: 'POST',
-            body: formData,
-            headers: formData.getHeaders(),
+            body: body,
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': body.length.toString()
+            },
             signal: AbortSignal.timeout(this.config.timeout)
         });
 

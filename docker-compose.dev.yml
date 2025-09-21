@@ -57,6 +57,7 @@ services:
       - WATCHPACK_POLLING=true
       # ML Service configuration
       - ML_SERVICE_URL=http://ml-service:8000
+      - ML_TIMEOUT_MS=${ML_TIMEOUT_MS:-1200000}
     depends_on:
       - postgres
       - ml-service
@@ -93,12 +94,20 @@ services:
   ml-service:
     build: ./ml
     container_name: ldt-med-ml
+    restart: unless-stopped
     ports:
-      - "5001:8000"
+      - "${ML_PORT:-5001}:8000"
     volumes:
       - ./ml:/app
     environment:
       - MODEL_PATH=/app/best_model.pth
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    gpus:
+      - count: all
+        capabilities: [gpu]
+    networks:
+      - app-network
 
 networks:
   app-network:

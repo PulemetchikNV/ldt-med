@@ -8,6 +8,7 @@ export interface MLPredictionResult {
     mask_image?: string;
     request_id?: string;
     patient_id?: string;
+    error?: string;
 }
 
 export interface MLSliceData {
@@ -20,11 +21,12 @@ export interface MLPredictionError {
 }
 
 export interface MLPredictZipResult {
-    message: string;
-    request_id: string;
-    patient_id: string;
-    has_tumor: boolean;
-    prediction: string;
+    message?: string;
+    request_id?: string;
+    patient_id?: string;
+    has_tumor?: boolean;
+    prediction?: string;
+    error?: string;
 }
 
 export type VolumeType = 'original' | 'mask';
