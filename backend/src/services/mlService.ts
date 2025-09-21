@@ -14,7 +14,7 @@ export class MLService {
     private config: MLServiceConfig;
 
     constructor(config: MLServiceConfig = {
-        baseUrl: process.env['ML_SERVICE_URL'] || 'http://ml:8000',
+        baseUrl: process.env['ML_SERVICE_URL'] || 'http://ml-service:8000',
         timeout: Number(process.env['ML_TIMEOUT_MS'] || 1200000) // по умолчанию 20 минут
     }) {
         this.config = config;
@@ -112,5 +112,77 @@ export class MLService {
         }
 
         return response.json() as Promise<{ message: string }>;
+    }
+
+    // ----------------------
+    // Доп. методы для ортосрезов и метаданных объёма
+    // ----------------------
+
+    private buildQuery(params: Record<string, unknown>): string {
+        const sp = new URLSearchParams();
+        Object.entries(params).forEach(([k, v]) => {
+            if (v === undefined || v === null) return;
+            sp.set(k, String(v));
+        });
+        const qs = sp.toString();
+        return qs ? `?${qs}` : '';
+    }
+
+    /**
+     * Получить метаданные объёма (shape, spacing, affine, intensity, доступные тома)
+     */
+    async getVolumeMeta(
+        patientId: string,
+        volumeType: 'original' | 'mask' = 'original'
+    ): Promise<{ shape: number[]; spacing: number[]; affine: number[][]; intensity: { min: number; max: number }; available_volumes: string[]; error?: string }> {
+        const qs = this.buildQuery({ volume_type: volumeType });
+        const response = await fetch(`${this.config.baseUrl}/volume/${patientId}/meta${qs}`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(this.config.timeout)
+        });
+        if (!response.ok) {
+            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
+    }
+
+    /**
+     * Получить ортогональные срезы (сагиттальный, корональный, аксиальный) одним запросом
+     */
+    async getOrthogonalSlices(
+        patientId: string,
+        params: {
+            i: number; j: number; k: number;
+            modality?: 'original' | 'mask';
+            overlay?: 'mask';
+            alpha?: number;
+            wl?: number; ww?: number;
+            scale?: number;
+        }
+    ): Promise<{
+        indices: { i: number; j: number; k: number };
+        sagittal: string; coronal: string; axial: string;
+        shape: number[];
+        error?: string;
+    }> {
+        const qs = this.buildQuery({
+            i: params.i,
+            j: params.j,
+            k: params.k,
+            modality: params.modality,
+            overlay: params.overlay,
+            alpha: params.alpha,
+            wl: params.wl,
+            ww: params.ww,
+            scale: params.scale
+        });
+        const response = await fetch(`${this.config.baseUrl}/orthoslices/${patientId}${qs}`, {
+            method: 'GET',
+            signal: AbortSignal.timeout(this.config.timeout)
+        });
+        if (!response.ok) {
+            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        }
+        return response.json();
     }
 }

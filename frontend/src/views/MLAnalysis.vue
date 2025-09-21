@@ -52,6 +52,18 @@
           :result="analysisResult"
           @new-analysis="startNewAnalysis"
         />
+        
+        <!-- Трехмерный просмотр для ZIP результатов -->
+        <div v-if="showOrthogonalViewer" class="orthogonal-section">
+          <OrthogonalViewer
+            :images="orthogonalImages"
+            :volume-shape="volumeShape"
+            :initial-coords="currentCoords"
+            :loading="loadingOrthogonal"
+            @coords-change="onCoordsChange"
+            @plane-click="onPlaneClick"
+          />
+        </div>
       </div>
     </div>
     
@@ -79,9 +91,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, reactive } from 'vue';
 import FileUploader from '../components/FileUploader.vue';
 import MLResults from '../components/MLResults.vue';
+import OrthogonalViewer from '../components/OrthogonalViewer.vue';
 import { MLApiService } from '../services/mlApi';
 import type { MLPredictionResult } from '../services/mlApi';
 
@@ -101,6 +114,17 @@ const analysisResult = ref<MLPredictionResult | null>(null);
 const analysisHistory = ref<HistoryItem[]>([]);
 const serviceHealthy = ref<boolean | null>(null);
 const checkingHealth = ref(false);
+
+// Состояние для трехмерного просмотра
+const showOrthogonalViewer = ref(false);
+const orthogonalImages = reactive({
+  sagittal: '',
+  coronal: '',
+  axial: ''
+});
+const volumeShape = ref<number[]>([0, 0, 0]);
+const currentCoords = reactive({ i: 0, j: 0, k: 0 });
+const loadingOrthogonal = ref(false);
 
 // Вычисляемые свойства для статуса сервиса
 const serviceStatusClass = computed(() => ({
@@ -135,7 +159,7 @@ const checkServiceHealth = async () => {
   }
 };
 
-const onUploadSuccess = (result: MLPredictionResult) => {
+const onUploadSuccess = async (result: MLPredictionResult) => {
   analysisResult.value = result;
   
   // Добавляем в историю
@@ -152,6 +176,11 @@ const onUploadSuccess = (result: MLPredictionResult) => {
   
   // Сохраняем историю в localStorage
   saveHistoryToStorage();
+  
+  // Если это ZIP результат с patient_id, загружаем метаданные и ортосрезы
+  if (result.data.patient_id) {
+    await loadOrthogonalData(result.data.patient_id);
+  }
 };
 
 const onUploadError = (error: string) => {
@@ -201,6 +230,85 @@ const loadHistoryFromStorage = () => {
     }
   } catch (error) {
     console.error('Failed to load history:', error);
+  }
+};
+
+// Методы для трехмерного просмотра
+const loadOrthogonalData = async (patientId: string) => {
+  try {
+    loadingOrthogonal.value = true;
+    showOrthogonalViewer.value = true;
+    
+    // Загружаем метаданные объема
+    const meta = await mlApi.getVolumeMeta(patientId);
+    if (meta.error) {
+      console.error('Failed to load volume metadata:', meta.error);
+      return;
+    }
+    
+    volumeShape.value = meta.shape;
+    
+    // Устанавливаем начальные координаты в центр
+    currentCoords.i = Math.floor((meta.shape[0] || 1) / 2);
+    currentCoords.j = Math.floor((meta.shape[1] || 1) / 2);
+    currentCoords.k = Math.floor((meta.shape[2] || 1) / 2);
+    
+    // Загружаем начальные ортосрезы
+    await loadOrthogonalSlices(patientId);
+    
+  } catch (error) {
+    console.error('Failed to load orthogonal data:', error);
+  } finally {
+    loadingOrthogonal.value = false;
+  }
+};
+
+const loadOrthogonalSlices = async (patientId: string) => {
+  try {
+    const slices = await mlApi.getOrthogonalSlices(patientId, {
+      i: currentCoords.i,
+      j: currentCoords.j,
+      k: currentCoords.k,
+      modality: 'original',
+      overlay: 'mask',
+      alpha: 0.4
+    });
+    
+    if (slices.error) {
+      console.error('Failed to load orthogonal slices:', slices.error);
+      return;
+    }
+    
+    orthogonalImages.sagittal = slices.sagittal;
+    orthogonalImages.coronal = slices.coronal;
+    orthogonalImages.axial = slices.axial;
+    
+  } catch (error) {
+    console.error('Failed to load orthogonal slices:', error);
+  }
+};
+
+const onCoordsChange = async (coords: { i: number; j: number; k: number }) => {
+  if (!analysisResult.value?.data.patient_id) return;
+  
+  currentCoords.i = coords.i;
+  currentCoords.j = coords.j;
+  currentCoords.k = coords.k;
+  
+  await loadOrthogonalSlices(analysisResult.value.data.patient_id);
+};
+
+const onPlaneClick = async (plane: string, coords: { i: number; j: number; k: number }, pixelCoords: { x: number; y: number }) => {
+  console.log(`Clicked on ${plane} plane at coords:`, coords, 'pixel:', pixelCoords);
+  
+  // Обновляем координаты
+  currentCoords.i = coords.i;
+  currentCoords.j = coords.j;
+  currentCoords.k = coords.k;
+  
+  // Перезагружаем срезы с новыми координатами
+  if (analysisResult.value?.data.patient_id) {
+    await loadOrthogonalSlices(analysisResult.value.data.patient_id);
   }
 };
 
@@ -287,6 +395,12 @@ onMounted(() => {
 
 .main-content {
   margin-bottom: 40px;
+}
+
+.orthogonal-section {
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 2px solid #e5e7eb;
 }
 
 .upload-section {

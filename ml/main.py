@@ -1,5 +1,5 @@
 import torch
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import nibabel as nib
@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image
 import base64
 from io import BytesIO
+from typing import Optional, Tuple
 from pathlib import Path
 import shutil
 import uuid
@@ -175,18 +176,13 @@ async def predict_zip(file: UploadFile = File(...)):
 async def get_slice(patient_id: str, volume_type: str, slice_index: int):
     results_path = RESULTS_CACHE.get(patient_id)
     if not results_path:
-        # If not in cache, try to find it on the filesystem.
-        # This makes the history feature robust to server restarts.
         patient_dir = STATIC_RESULTS_DIR / patient_id
         if patient_dir.is_dir():
             try:
-                # The actual results are in a subdirectory named after the zip file.
-                # We assume there is only one such subdirectory.
                 sub_dir = next(d for d in patient_dir.iterdir() if d.is_dir())
                 results_path = sub_dir
-                RESULTS_CACHE[patient_id] = results_path  # Add to cache for future requests
+                RESULTS_CACHE[patient_id] = results_path
             except StopIteration:
-                # No subdirectory found, results_path remains None
                 pass
 
     if not results_path or not results_path.is_dir():
@@ -235,3 +231,175 @@ async def get_slice(patient_id: str, volume_type: str, slice_index: int):
 @app.get("/")
 def read_root():
     return {"message": "Backend is running and configured for 3D NIfTI files."}
+
+# --------------------
+# New helpers & endpoints for volume meta and orthogonal slices
+# --------------------
+
+def _resolve_results_path(patient_id: str) -> Optional[Path]:
+    results_path = RESULTS_CACHE.get(patient_id)
+    if results_path and results_path.exists():
+        return results_path
+    patient_dir = STATIC_RESULTS_DIR / patient_id
+    if not patient_dir.is_dir():
+        return None
+    try:
+        sub_dir = next(d for d in patient_dir.iterdir() if d.is_dir())
+        RESULTS_CACHE[patient_id] = sub_dir
+        return sub_dir
+    except StopIteration:
+        return None
+
+def _load_volume(results_path: Path, volume_type: str) -> Tuple[nib.Nifti1Image, np.ndarray]:
+    file_map = {
+        "original": "source_reference.nii.gz",
+        "mask": "segmentation.nii.gz",
+    }
+    if volume_type not in file_map:
+        raise ValueError("Invalid volume type")
+    file_path = results_path / file_map[volume_type]
+    if not file_path.exists():
+        raise FileNotFoundError(f"{volume_type} data not found")
+    nii = nib.load(str(file_path))
+    data = nii.get_fdata()
+    return nii, data
+
+@app.get("/volume/{patient_id}/meta")
+def get_volume_meta(patient_id: str, volume_type: str = Query("original")):
+    try:
+        results_path = _resolve_results_path(patient_id)
+        if not results_path:
+            return {"error": "Invalid patient ID or results have expired."}
+        nii, data = _load_volume(results_path, volume_type)
+        shape = list(data.shape)
+        # zooms may have length 3 or more; take first 3
+        try:
+            spacing = list(nib.affines.voxel_sizes(nii.affine))
+        except Exception:
+            spacing = list(nii.header.get_zooms()[:3]) if hasattr(nii, 'header') else [1.0, 1.0, 1.0]
+        affine = nii.affine.tolist()
+        vmin = float(np.nanmin(data)) if data.size else 0.0
+        vmax = float(np.nanmax(data)) if data.size else 1.0
+        available = []
+        for vt in ("original", "mask"):
+            try:
+                _ = _load_volume(results_path, vt)
+                available.append(vt)
+            except Exception:
+                pass
+        return {
+            "shape": shape,
+            "spacing": spacing,
+            "affine": affine,
+            "intensity": {"min": vmin, "max": vmax},
+            "available_volumes": available,
+        }
+    except Exception as e:
+        print(f"Error get_volume_meta: {e}")
+        return {"error": str(e)}
+
+def _normalize_to_uint8(arr: np.ndarray, wl: Optional[float], ww: Optional[float]) -> np.ndarray:
+    a = arr.astype(np.float32)
+    if wl is not None and ww is not None and ww > 0:
+        low = wl - ww / 2.0
+        high = wl + ww / 2.0
+        a = np.clip((a - low) / max(high - low, 1e-6), 0.0, 1.0)
+    else:
+        amin, amax = float(np.nanmin(a)), float(np.nanmax(a))
+        if amax > amin:
+            a = (a - amin) / (amax - amin)
+        else:
+            a = np.zeros_like(a, dtype=np.float32)
+    return (a * 255.0).astype(np.uint8)
+
+def _overlay_mask(rgb: np.ndarray, mask_slice: np.ndarray, alpha: float = 0.4) -> np.ndarray:
+    out = rgb.copy()
+    alpha = float(np.clip(alpha, 0.0, 1.0))
+    # simple coloring by class id
+    colors = {
+        1: np.array([255, 0, 0], dtype=np.uint8),
+        2: np.array([0, 255, 0], dtype=np.uint8),
+        3: np.array([0, 0, 255], dtype=np.uint8),
+    }
+    mask_int = mask_slice.astype(np.int32)
+    for cls, color in colors.items():
+        m = mask_int == cls
+        if np.any(m):
+            out[m] = (alpha * color + (1 - alpha) * out[m]).astype(np.uint8)
+    return out
+
+def _encode_png(img_array: np.ndarray) -> str:
+    img = Image.fromarray(img_array)
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
+
+@app.get("/orthoslices/{patient_id}")
+def get_orthoslices(
+    patient_id: str,
+    i: int = Query(0, ge=0),
+    j: int = Query(0, ge=0),
+    k: int = Query(0, ge=0),
+    modality: str = Query("original"),
+    overlay: Optional[str] = Query(None),
+    alpha: float = Query(0.4),
+    wl: Optional[float] = Query(None),
+    ww: Optional[float] = Query(None),
+    scale: float = Query(1.0)
+):
+    try:
+        results_path = _resolve_results_path(patient_id)
+        if not results_path:
+            return {"error": "Invalid patient ID or results have expired."}
+        nii, data = _load_volume(results_path, modality)
+        data = np.asarray(data)
+        X, Y, Z = data.shape[:3]
+        ii = int(np.clip(i, 0, X - 1))
+        jj = int(np.clip(j, 0, Y - 1))
+        kk = int(np.clip(k, 0, Z - 1))
+
+        # Extract three orthogonal slices
+        sag = data[ii, :, :]  # X-plane (sagittal)
+        cor = data[:, jj, :]  # Y-plane (coronal)
+        axi = data[:, :, kk]  # Z-plane (axial)
+
+        # Normalize and convert to RGB
+        sag_u8 = _normalize_to_uint8(sag, wl, ww)
+        cor_u8 = _normalize_to_uint8(cor, wl, ww)
+        axi_u8 = _normalize_to_uint8(axi, wl, ww)
+        sag_rgb = np.stack([sag_u8]*3, axis=-1)
+        cor_rgb = np.stack([cor_u8]*3, axis=-1)
+        axi_rgb = np.stack([axi_u8]*3, axis=-1)
+
+        # Optional overlay from mask
+        if overlay == "mask":
+            try:
+                _, mask = _load_volume(results_path, "mask")
+                sag_rgb = _overlay_mask(sag_rgb, mask[ii, :, :], alpha)
+                cor_rgb = _overlay_mask(cor_rgb, mask[:, jj, :], alpha)
+                axi_rgb = _overlay_mask(axi_rgb, mask[:, :, kk], alpha)
+            except Exception:
+                pass
+
+        # Optional downscale
+        def _scale_img(rgb: np.ndarray) -> np.ndarray:
+            if abs(scale - 1.0) < 1e-6:
+                return rgb
+            new_h = max(1, int(rgb.shape[0] * scale))
+            new_w = max(1, int(rgb.shape[1] * scale))
+            return np.array(Image.fromarray(rgb).resize((new_w, new_h), Image.BILINEAR))
+
+        sag_rgb = _scale_img(sag_rgb)
+        cor_rgb = _scale_img(cor_rgb)
+        axi_rgb = _scale_img(axi_rgb)
+
+        return {
+            "indices": {"i": ii, "j": jj, "k": kk},
+            "sagittal": _encode_png(sag_rgb),
+            "coronal": _encode_png(cor_rgb),
+            "axial": _encode_png(axi_rgb),
+            "shape": [int(X), int(Y), int(Z)]
+        }
+    except Exception as e:
+        print(f"Error get_orthoslices: {e}")
+        return {"error": str(e)}
