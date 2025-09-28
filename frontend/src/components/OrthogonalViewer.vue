@@ -5,6 +5,7 @@
       <div class="coordinates-display">
         <span class="coord-label">Координаты:</span>
         <span class="coord-value">X: {{ currentCoords.i }}, Y: {{ currentCoords.j }}, Z: {{ currentCoords.k }}</span>
+        <span v-if="sliderState.isDragging" class="loading-indicator">⏳</span>
       </div>
     </div>
     
@@ -124,8 +125,13 @@
           :min="0" 
           :max="(volumeShape[0] || 1) - 1" 
           v-model.number="currentCoords.i"
-          @input="onCoordsChange"
+          @input="onSliderInput"
+          @mousedown="onSliderStart"
+          @mouseup="onSliderEnd"
+          @touchstart="onSliderStart"
+          @touchend="onSliderEnd"
           class="coord-slider"
+          :class="{ 'dragging': sliderState.isDragging }"
         />
         <span class="coord-display">{{ currentCoords.i }}</span>
       </div>
@@ -137,8 +143,13 @@
           :min="0" 
           :max="(volumeShape[1] || 1) - 1" 
           v-model.number="currentCoords.j"
-          @input="onCoordsChange"
+          @input="onSliderInput"
+          @mousedown="onSliderStart"
+          @mouseup="onSliderEnd"
+          @touchstart="onSliderStart"
+          @touchend="onSliderEnd"
           class="coord-slider"
+          :class="{ 'dragging': sliderState.isDragging }"
         />
         <span class="coord-display">{{ currentCoords.j }}</span>
       </div>
@@ -150,8 +161,13 @@
           :min="0" 
           :max="(volumeShape[2] || 1) - 1" 
           v-model.number="currentCoords.k"
-          @input="onCoordsChange"
+          @input="onSliderInput"
+          @mousedown="onSliderStart"
+          @mouseup="onSliderEnd"
+          @touchstart="onSliderStart"
+          @touchend="onSliderEnd"
           class="coord-slider"
+          :class="{ 'dragging': sliderState.isDragging }"
         />
         <span class="coord-display">{{ currentCoords.k }}</span>
       </div>
@@ -160,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue';
+import { ref, reactive, watch, onUnmounted } from 'vue';
 
 interface Coordinates {
   i: number;
@@ -192,6 +208,11 @@ interface Props {
   loading?: boolean;
 }
 
+interface SliderState {
+  isDragging: boolean;
+  pendingCoords: Coordinates | null;
+}
+
 interface Emits {
   (e: 'coords-change', coords: Coordinates): void;
   (e: 'plane-click', plane: string, coords: Coordinates, pixelCoords: { x: number; y: number }): void;
@@ -217,12 +238,54 @@ const sagittalImage = ref<HTMLImageElement>();
 const coronalImage = ref<HTMLImageElement>();
 const axialImage = ref<HTMLImageElement>();
 
+// Debounce для слайдеров
+let debounceTimer: number | null = null;
+const DEBOUNCE_DELAY = 300; // 300ms задержка
+
+// Состояние слайдеров
+const sliderState = reactive<SliderState>({
+  isDragging: false,
+  pendingCoords: null
+});
+
 // Методы
 const onCoordsChange = () => {
-  emit('coords-change', { ...currentCoords });
+  // Очищаем предыдущий таймер
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  
+  // Устанавливаем новый таймер
+  debounceTimer = window.setTimeout(() => {
+    emit('coords-change', { ...currentCoords });
+  }, DEBOUNCE_DELAY);
+};
+
+const onSliderInput = () => {
+  // При движении слайдера отмечаем, что идет перетаскивание
+  sliderState.isDragging = true;
+  sliderState.pendingCoords = { ...currentCoords };
+};
+
+const onSliderStart = () => {
+  sliderState.isDragging = true;
+};
+
+const onSliderEnd = () => {
+  sliderState.isDragging = false;
+  // Отправляем финальные координаты
+  if (sliderState.pendingCoords) {
+    emit('coords-change', { ...sliderState.pendingCoords });
+    sliderState.pendingCoords = null;
+  }
 };
 
 const onPlaneClick = (plane: string, event: MouseEvent) => {
+  // Очищаем debounce таймер при клике (мгновенный отклик)
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+  
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
@@ -268,6 +331,13 @@ watch(() => props.volumeShape, (newShape) => {
         currentCoords.k = Math.min(currentCoords.k, (newShape[2] || 1) - 1);
   }
 });
+
+// Очистка таймера при размонтировании компонента
+onUnmounted(() => {
+  if (debounceTimer) {
+    clearTimeout(debounceTimer);
+  }
+});
 </script>
 
 <style scoped>
@@ -311,6 +381,17 @@ watch(() => props.volumeShape, (newShape) => {
 .coord-value {
   color: #374151;
   font-weight: 600;
+}
+
+.loading-indicator {
+  margin-left: 8px;
+  font-size: 14px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .viewer-grid {
@@ -443,6 +524,7 @@ watch(() => props.volumeShape, (newShape) => {
   border-radius: 3px;
   outline: none;
   -webkit-appearance: none;
+  appearance: none;
 }
 
 .coord-slider::-webkit-slider-thumb {
@@ -464,6 +546,20 @@ watch(() => props.volumeShape, (newShape) => {
   cursor: pointer;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.coord-slider.dragging {
+  background: #dbeafe;
+}
+
+.coord-slider.dragging::-webkit-slider-thumb {
+  background: #1d4ed8;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.coord-slider.dragging::-moz-range-thumb {
+  background: #1d4ed8;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
 }
 
 .coord-display {

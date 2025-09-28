@@ -124,3 +124,8 @@ Thumbs.db
 *.tmp
 *.temp
 */.venv_update/*
+# BMAD (local only)
+.bmad-core/
+.bmad-*/
+tmp/
+ml/static_results/*

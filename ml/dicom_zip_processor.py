@@ -86,14 +86,63 @@ class DicomMeningiomaLoader:
         resampler.SetDefaultPixelValue(0)
         return resampler.Execute(image)
 
+    def _sort_series_files(self, series_files: list) -> list:
+        """Ensure a deterministic slice order for a DICOM series.
+
+        Some scanners store slices with non-monotonic ImagePositionPatient values
+        (e.g. multi-slab acquisitions).  SimpleITK's ImageSeriesReader sorts
+        primarily by physical position and may therefore interleave slabs,
+        producing pronounced striping artifacts after resampling.  When the
+        InstanceNumber tag is present it encodes the intended slice order, so we
+        prefer it.  As a fallback we sort by the projection of
+        ImagePositionPatient onto the slice normal; if neither tag is available
+        we keep the original order.
+        """
+
+        ordered: list[tuple[int, float, Path]] = []
+        normal_vec = None
+
+        for path in series_files:
+            try:
+                ds = pydicom.dcmread(str(path), stop_before_pixels=True, force=True)
+            except Exception:
+                continue
+
+            instance_number = getattr(ds, "InstanceNumber", None)
+            if instance_number is not None:
+                ordered.append((0, float(instance_number), path))
+                continue
+
+            ipp = ds.get("ImagePositionPatient")
+            iop = ds.get("ImageOrientationPatient")
+            if ipp is not None and iop is not None:
+                if normal_vec is None:
+                    # Compute slice normal once we have orientation information.
+                    row = np.array(iop[:3], dtype=float)
+                    col = np.array(iop[3:], dtype=float)
+                    cross = np.cross(row, col)
+                    if np.linalg.norm(cross) > 0:
+                        normal_vec = cross
+                if normal_vec is not None:
+                    position = float(np.dot(normal_vec, np.array(ipp, dtype=float)))
+                    ordered.append((1, position, path))
+                    continue
+
+            # Fallback – retain original ordering.
+            ordered.append((2, float(len(ordered)), path))
+
+        ordered.sort(key=lambda item: (item[0], item[1]))
+        return [entry[2] for entry in ordered]
+
     def _process_series(self, series_files: list) -> tuple[str | None, sitk.Image | None]:
         """Helper function to process a single DICOM series."""
         modality_name = self._identify_modality(series_files)
         if not modality_name:
             return None, None
         try:
+            sorted_files = self._sort_series_files(series_files)
             reader = sitk.ImageSeriesReader()
-            reader.SetFileNames([str(f) for f in series_files])
+            reader.SetFileNames([str(f) for f in sorted_files])
             sitk_img = reader.Execute()
             return modality_name, sitk_img
         except Exception as e:
@@ -135,6 +184,32 @@ class DicomMeningiomaLoader:
             logging.error("Не удалось выбрать эталонное изображение. Инференс невозможен.")
             return None, None, None
 
+        # Create isotropic (1x1x1) reference image based on the chosen reference image
+        try:
+            original_spacing = ref_image.GetSpacing()
+            original_size = ref_image.GetSize()
+            new_spacing = (1.0, 1.0, 1.0)
+            new_size = [
+                int(round(original_size[i] * (original_spacing[i] / new_spacing[i])))
+                for i in range(3)
+            ]
+            resampler = sitk.ResampleImageFilter()
+            resampler.SetOutputSpacing(new_spacing)
+            resampler.SetSize(new_size)
+            resampler.SetOutputOrigin(ref_image.GetOrigin())
+            resampler.SetOutputDirection(ref_image.GetDirection())
+            resampler.SetInterpolator(sitk.sitkLinear)
+            resampler.SetDefaultPixelValue(0)
+            try:
+                resampler.SetOutputPixelType(ref_image.GetPixelID())
+            except Exception:
+                pass
+            isotropic_ref_image = resampler.Execute(ref_image)
+            # Use isotropic reference for downstream operations
+            ref_image = isotropic_ref_image
+        except Exception:
+            pass
+
         final_volume_channels = []
         # ... (блок ресэмплинга и сборки каналов остается без изменений) ...
         for modality in ['t1', 't1c', 't2', 'flair']:
@@ -149,7 +224,9 @@ class DicomMeningiomaLoader:
 
             if image_to_process:
                 resampled_image = self._resample_image_to_reference(image_to_process, ref_image)
-                final_volume_channels.append(sitk.GetArrayFromImage(resampled_image))
+                arr = sitk.GetArrayFromImage(resampled_image)
+                print("shape of array", arr.shape)
+                final_volume_channels.append(arr)
             else:
                 logging.warning(f"Не удалось найти замену для '{modality}'. Создаем пустой канал.")
                 shape = ref_image.GetSize()[::-1]

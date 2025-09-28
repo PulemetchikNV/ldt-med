@@ -158,9 +158,9 @@ async def predict_zip(file: UploadFile = File(...)):
         RESULTS_CACHE[request_id] = patient_results_path
         
         # We need to read the number of slices from the file
-        mask_nii = nib.load(mask_path)
-        total_slices = mask_nii.shape[2]
-        has_tumor = np.sum(mask_nii.get_fdata()) > 0
+        _, mask_data = _load_volume(patient_results_path, "mask")
+        total_slices = mask_data.shape[2]
+        has_tumor = np.sum(mask_data) > 0
         prediction_class = "Tumor" if has_tumor else "No Tumor"
         return {
             "prediction": prediction_class,
@@ -174,51 +174,34 @@ async def predict_zip(file: UploadFile = File(...)):
 
 @app.get("/slice/{patient_id}/{volume_type}/{slice_index}")
 async def get_slice(patient_id: str, volume_type: str, slice_index: int):
-    results_path = RESULTS_CACHE.get(patient_id)
+    results_path = _resolve_results_path(patient_id)
     if not results_path:
-        patient_dir = STATIC_RESULTS_DIR / patient_id
-        if patient_dir.is_dir():
-            try:
-                sub_dir = next(d for d in patient_dir.iterdir() if d.is_dir())
-                results_path = sub_dir
-                RESULTS_CACHE[patient_id] = results_path
-            except StopIteration:
-                pass
-
-    if not results_path or not results_path.is_dir():
         return {"error": "Invalid patient ID or results have expired."}
-    file_map = {
-        "original": "source_reference.nii.gz",
-        "mask": "segmentation.nii.gz"
-    }
-    if volume_type not in file_map:
+    if volume_type not in {"original", "mask"}:
         return {"error": "Invalid volume type requested."}
-    file_path = results_path / file_map[volume_type]
-    if not file_path.exists():
-        return {"error": f"{volume_type} data not found."}
     try:
-        nii_img = nib.load(file_path)
-        data = nii_img.get_fdata()
-        
-        if not (0 <= slice_index < data.shape[2]):
-            return {"error": "Slice index out of bounds."}
-        slice_data = data[:, :, slice_index]
+        _, data = _load_volume(results_path, volume_type)
+    except FileNotFoundError:
+        return {"error": f"{volume_type} data not found."}
+    except Exception as e:
+        print(f"Error loading volume in get_slice: {e}")
+        return {"error": "Failed to load volume."}
+
+    if not (0 <= slice_index < data.shape[2]):
+        return {"error": "Slice index out of bounds."}
+
+    slice_data = np.asarray(data[:, :, slice_index])
+
+    try:
         if volume_type == "original":
             if slice_data.max() > slice_data.min():
                 slice_data = (slice_data - slice_data.min()) / (slice_data.max() - slice_data.min())
             img = Image.fromarray((slice_data * 255).astype(np.uint8), 'L')
-        elif volume_type == "mask":
-            # Initialize an RGBA image (height, width, 4 channels) with all zeros (fully transparent)
+        else:
             rgba_data = np.zeros((slice_data.shape[0], slice_data.shape[1], 4), dtype=np.uint8)
-            
-            # Assign colors based on mask values.
-            # Values in the mask correspond to different parts of the tumor.
-            # We will use distinct colors for better visualization.
-            rgba_data[slice_data == 1] = [255, 0, 0, 255]  # Red for value 1
-            rgba_data[slice_data == 2] = [0, 255, 0, 255]  # Green for value 2
-            rgba_data[slice_data == 3] = [0, 0, 255, 255]  # Blue for value 3
-
-            # Create a PIL image from the numpy array in RGBA mode
+            rgba_data[slice_data == 1] = [255, 0, 0, 255]
+            rgba_data[slice_data == 2] = [0, 255, 0, 255]
+            rgba_data[slice_data == 3] = [0, 0, 255, 255]
             img = Image.fromarray(rgba_data, 'RGBA')
         buffered = BytesIO()
         img.save(buffered, format="PNG")
@@ -261,8 +244,13 @@ def _load_volume(results_path: Path, volume_type: str) -> Tuple[nib.Nifti1Image,
     if not file_path.exists():
         raise FileNotFoundError(f"{volume_type} data not found")
     nii = nib.load(str(file_path))
-    data = nii.get_fdata()
-    return nii, data
+    canonical = nib.as_closest_canonical(nii)
+    data = canonical.get_fdata()
+    if volume_type == "mask":
+        data = np.asarray(data, dtype=np.uint8)
+    else:
+        data = np.asarray(data, dtype=np.float32)
+    return canonical, data
 
 @app.get("/volume/{patient_id}/meta")
 def get_volume_meta(patient_id: str, volume_type: str = Query("original")):
@@ -271,7 +259,7 @@ def get_volume_meta(patient_id: str, volume_type: str = Query("original")):
         if not results_path:
             return {"error": "Invalid patient ID or results have expired."}
         nii, data = _load_volume(results_path, volume_type)
-        shape = list(data.shape)
+        shape = list(data.shape[:3])
         # zooms may have length 3 or more; take first 3
         try:
             spacing = list(nib.affines.voxel_sizes(nii.affine))
@@ -334,6 +322,26 @@ def _encode_png(img_array: np.ndarray) -> str:
     img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
+def _make_square_slice(slice_data: np.ndarray, fill_value: int | float = 0) -> np.ndarray:
+    """Pad a 2D slice to a square canvas without distorting the image."""
+    h, w = slice_data.shape
+    target = max(h, w)
+    if h == target and w == target:
+        return slice_data
+
+    pad_h = target - h
+    pad_w = target - w
+    pad_top = pad_h // 2
+    pad_bottom = pad_h - pad_top
+    pad_left = pad_w // 2
+    pad_right = pad_w - pad_left
+    return np.pad(
+        slice_data,
+        ((pad_top, pad_bottom), (pad_left, pad_right)),
+        mode="constant",
+        constant_values=fill_value,
+    )
+
 @app.get("/orthoslices/{patient_id}")
 def get_orthoslices(
     patient_id: str,
@@ -351,47 +359,86 @@ def get_orthoslices(
         results_path = _resolve_results_path(patient_id)
         if not results_path:
             return {"error": "Invalid patient ID or results have expired."}
+
+        # Загружаем NIfTI через _load_volume (он возвращает nii, data)
         nii, data = _load_volume(results_path, modality)
         data = np.asarray(data)
-        X, Y, Z = data.shape[:3]
-        ii = int(np.clip(i, 0, X - 1))
-        jj = int(np.clip(j, 0, Y - 1))
-        kk = int(np.clip(k, 0, Z - 1))
 
-        # Extract three orthogonal slices
-        sag = data[ii, :, :]  # X-plane (sagittal)
-        cor = data[:, jj, :]  # Y-plane (coronal)
-        axi = data[:, :, kk]  # Z-plane (axial)
+        if data.ndim < 3:
+            return {"error": f"Volume has wrong number of dimensions: {data.shape}"}
 
-        # Normalize and convert to RGB
-        sag_u8 = _normalize_to_uint8(sag, wl, ww)
-        cor_u8 = _normalize_to_uint8(cor, wl, ww)
-        axi_u8 = _normalize_to_uint8(axi, wl, ww)
-        sag_rgb = np.stack([sag_u8]*3, axis=-1)
-        cor_rgb = np.stack([cor_u8]*3, axis=-1)
-        axi_rgb = np.stack([axi_u8]*3, axis=-1)
+        if data.ndim > 3:
+            if data.shape[0] <= 4:
+                data = data[0]
+            else:
+                data = data[..., 0]
 
-        # Optional overlay from mask
+        if data.ndim != 3:
+            return {"error": f"Unable to reduce volume to 3 dimensions, got shape {data.shape}"}
+
+        data = np.ascontiguousarray(data)
+        X, Y, Z = data.shape
+
+        ii = int(np.clip(i if i is not None else X // 2, 0, X - 1))
+        jj = int(np.clip(j if j is not None else Y // 2, 0, Y - 1))
+        kk = int(np.clip(k if k is not None else Z // 2, 0, Z - 1))
+
+        def _extract_plane(volume: np.ndarray, plane: str, idx: int) -> np.ndarray:
+            if plane == "sagittal":
+                plane_data = volume[idx, :, :]
+            elif plane == "coronal":
+                plane_data = volume[:, idx, :]
+            else:
+                plane_data = volume[:, :, idx]
+            return np.ascontiguousarray(plane_data)
+
+        def _prepare_gray(plane: str, idx: int) -> np.ndarray:
+            raw_slice = _extract_plane(data, plane, idx)
+            norm_slice = _normalize_to_uint8(raw_slice, wl, ww)
+            return _make_square_slice(norm_slice)
+
+        sag_u8 = _prepare_gray("sagittal", ii)
+        cor_u8 = _prepare_gray("coronal", jj)
+        axi_u8 = _prepare_gray("axial", kk)
+
+        sag_rgb = np.stack([sag_u8] * 3, axis=-1)
+        cor_rgb = np.stack([cor_u8] * 3, axis=-1)
+        axi_rgb = np.stack([axi_u8] * 3, axis=-1)
+
         if overlay == "mask":
             try:
                 _, mask = _load_volume(results_path, "mask")
-                sag_rgb = _overlay_mask(sag_rgb, mask[ii, :, :], alpha)
-                cor_rgb = _overlay_mask(cor_rgb, mask[:, jj, :], alpha)
-                axi_rgb = _overlay_mask(axi_rgb, mask[:, :, kk], alpha)
-            except Exception:
-                pass
+                mask = np.asarray(mask)
 
-        # Optional downscale
+                if mask.ndim > 3:
+                    if mask.shape[0] <= 4:
+                        mask = mask[0]
+                    else:
+                        mask = mask[..., 0]
+
+                mask = np.ascontiguousarray(mask)
+
+                sag_mask = _make_square_slice(_extract_plane(mask, "sagittal", ii).astype(np.uint8))
+                cor_mask = _make_square_slice(_extract_plane(mask, "coronal", jj).astype(np.uint8))
+                axi_mask = _make_square_slice(_extract_plane(mask, "axial", kk).astype(np.uint8))
+
+                sag_rgb = _overlay_mask(sag_rgb, sag_mask, alpha)
+                cor_rgb = _overlay_mask(cor_rgb, cor_mask, alpha)
+                axi_rgb = _overlay_mask(axi_rgb, axi_mask, alpha)
+            except Exception as e:
+                print(f"Mask overlay failed: {e}")
+
         def _scale_img(rgb: np.ndarray) -> np.ndarray:
             if abs(scale - 1.0) < 1e-6:
                 return rgb
             new_h = max(1, int(rgb.shape[0] * scale))
             new_w = max(1, int(rgb.shape[1] * scale))
-            return np.array(Image.fromarray(rgb).resize((new_w, new_h), Image.BILINEAR))
+            return np.asarray(Image.fromarray(rgb).resize((new_w, new_h), resample=Image.BILINEAR))
 
         sag_rgb = _scale_img(sag_rgb)
         cor_rgb = _scale_img(cor_rgb)
         axi_rgb = _scale_img(axi_rgb)
+
 
         return {
             "indices": {"i": ii, "j": jj, "k": kk},
@@ -400,6 +447,7 @@ def get_orthoslices(
             "axial": _encode_png(axi_rgb),
             "shape": [int(X), int(Y), int(Z)]
         }
+
     except Exception as e:
         print(f"Error get_orthoslices: {e}")
         return {"error": str(e)}
