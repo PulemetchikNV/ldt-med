@@ -4,7 +4,9 @@ import {
     MLSliceData,
     MLPredictZipResult,
     VolumeType,
-    MLServiceConfig
+    MLServiceConfig,
+    MLAnalyzeResponse,
+    MLClassifyDicomResponse
 } from '../types/ml.js';
 
 /**
@@ -13,11 +15,75 @@ import {
 export class MLService {
     private config: MLServiceConfig;
 
-    constructor(config: MLServiceConfig = {
-        baseUrl: process.env['ML_SERVICE_URL'] || 'http://ml-service:8000',
-        timeout: Number(process.env['ML_TIMEOUT_MS'] || 1200000) // по умолчанию 20 минут
-    }) {
-        this.config = config;
+    constructor(config?: MLServiceConfig) {
+        const defaultConfig = {
+            baseUrl: process.env['ML_SERVICE_URL'] || 'http://ml-service:8000',
+            timeout: Number(process.env['ML_TIMEOUT_MS'] || 1200000)
+        };
+        const analyzeUrl = process.env['ML_ANALYZE_URL'];
+
+        this.config = {
+            ...defaultConfig,
+            ...(analyzeUrl && { analyzeUrl }),
+            ...config
+        };
+    }
+
+    /**
+     * Анализ текстового промпта с/без файла
+     */
+    async analyze(textPrompt: string, fileBuffer?: Buffer, filename?: string): Promise<MLAnalyzeResponse> {
+        const analyzeUrl = this.config.analyzeUrl;
+        if (!analyzeUrl) {
+            throw new Error('ML_ANALYZE_URL is not configured');
+        }
+
+        const formData = new FormData();
+        formData.append('text_prompt', textPrompt);
+
+        if (fileBuffer && filename) {
+            formData.append('file', fileBuffer, {
+                filename,
+                contentType: 'application/octet-stream'
+            });
+        }
+
+        const response = await fetch(analyzeUrl, {
+            method: 'POST',
+            body: formData as any,
+            headers: formData.getHeaders(),
+            signal: AbortSignal.timeout(this.config.timeout)
+        });
+
+        if (!response.ok) {
+            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        }
+
+        return response.json() as Promise<MLAnalyzeResponse>;
+    }
+
+    /**
+     * Классификация DICOM файла
+     */
+    async classifyDicom(fileBuffer: Buffer, filename: string): Promise<MLClassifyDicomResponse> {
+        const formData = new FormData();
+        formData.append('file', fileBuffer, {
+            filename,
+            contentType: 'application/dicom'
+        });
+
+        const response = await fetch(`${this.config.baseUrl}/classify-dicom/`, {
+            method: 'POST',
+            body: formData as any,
+            headers: formData.getHeaders(),
+            signal: AbortSignal.timeout(this.config.timeout)
+        });
+
+        if (!response.ok) {
+            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        }
+
+        return response.json() as Promise<MLClassifyDicomResponse>;
     }
 
     /**

@@ -37,5 +37,15 @@ export type VolumeType = 'original' | 'mask';
 
 export interface MLServiceConfig {
     baseUrl: string;
+    analyzeUrl?: string;
     timeout: number;
+}
+
+export interface MLAnalyzeResponse {
+    analysis: string;
+    error?: string;
+}
+
+export interface MLClassifyDicomResponse {
+    [key: string]: string;
 }

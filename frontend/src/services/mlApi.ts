@@ -58,6 +58,20 @@ export interface MLOrthogonalSlices {
     error?: string;
 }
 
+export interface MLAnalyzeResult {
+    success: boolean;
+    data: {
+        analysis: string;
+    };
+}
+
+export interface MLClassifyDicomResult {
+    success: boolean;
+    data: {
+        [key: string]: string;
+    };
+}
+
 export interface AnalysisRecord {
     id: number;
     analysisType: 'NIFTI' | 'DICOM_ZIP';
@@ -88,6 +102,51 @@ export class MLApiService {
 
     private authHeaders(): HeadersInit {
         return { Authorization: `Bearer ${this.requireToken()}` };
+    }
+
+    /**
+     * Анализ с текстовым промптом (и опционально файлом)
+     */
+    async analyze(textPrompt: string, file?: File): Promise<MLAnalyzeResult> {
+        const formData = new FormData();
+        formData.append('text_prompt', textPrompt);
+        if (file) {
+            formData.append('file', file);
+        }
+
+        const response = await fetch(`${this.baseUrl}/api/ml/analyze`, {
+            method: 'POST',
+            body: formData,
+            headers: this.authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Ошибка при выполнении анализа');
+        }
+
+        return response.json();
+    }
+
+    /**
+     * Классификация DICOM файла
+     */
+    async classifyDicom(file: File): Promise<MLClassifyDicomResult> {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`${this.baseUrl}/api/ml/classify-dicom`, {
+            method: 'POST',
+            body: formData,
+            headers: this.authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Ошибка при классификации DICOM файла');
+        }
+
+        return response.json();
     }
 
     /**
