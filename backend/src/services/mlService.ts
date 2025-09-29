@@ -32,7 +32,7 @@ export class MLService {
 
         const response = await fetch(`${this.config.baseUrl}/predict`, {
             method: 'POST',
-            body: formData,
+            body: formData as any,
             headers: formData.getHeaders(),
             signal: AbortSignal.timeout(this.config.timeout)
         });

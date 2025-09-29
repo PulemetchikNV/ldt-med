@@ -11,8 +11,11 @@ export interface MLPredictionResult {
         request_id?: string;
         patient_id?: string;
         message?: string;
+        total_slices?: number;
+        analysis_id?: number;
     };
     filename: string;
+    analysisId?: number;
 }
 
 export interface MLSliceResult {
@@ -55,11 +58,36 @@ export interface MLOrthogonalSlices {
     error?: string;
 }
 
+export interface AnalysisRecord {
+    id: number;
+    analysisType: 'NIFTI' | 'DICOM_ZIP';
+    inputFilename: string | null;
+    patientId: string | null;
+    requestId: string | null;
+    prediction: string | null;
+    hasTumor: boolean | null;
+    createdAt: string;
+    updatedAt: string;
+    metadata?: unknown;
+}
+
 export class MLApiService {
     private baseUrl: string;
 
     constructor() {
         this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    }
+
+    private requireToken(): string {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            throw new Error('Требуется авторизация');
+        }
+        return token;
+    }
+
+    private authHeaders(): HeadersInit {
+        return { Authorization: `Bearer ${this.requireToken()}` };
     }
 
     /**
@@ -72,6 +100,7 @@ export class MLApiService {
         const response = await fetch(`${this.baseUrl}/api/ml/predict/nifti`, {
             method: 'POST',
             body: formData,
+            headers: this.authHeaders()
         });
 
         if (!response.ok) {
@@ -92,6 +121,7 @@ export class MLApiService {
         const response = await fetch(`${this.baseUrl}/api/ml/predict/zip`, {
             method: 'POST',
             body: formData,
+            headers: this.authHeaders()
         });
 
         if (!response.ok) {
@@ -112,7 +142,9 @@ export class MLApiService {
     ): Promise<MLSliceResult> {
         const response = await fetch(
             `${this.baseUrl}/api/ml/slice/${patientId}/${volumeType}/${sliceIndex}`
-        );
+        , {
+            headers: this.authHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -145,7 +177,9 @@ export class MLApiService {
     ): Promise<MLVolumeMeta> {
         const response = await fetch(
             `${this.baseUrl}/api/ml/volume/${patientId}/meta?volume_type=${volumeType}`
-        );
+        , {
+            headers: this.authHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
@@ -186,11 +220,39 @@ export class MLApiService {
 
         const response = await fetch(
             `${this.baseUrl}/api/ml/orthoslices/${patientId}?${searchParams.toString()}`
-        );
+        , {
+            headers: this.authHeaders()
+        });
 
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.error || 'Ошибка при получении ортогональных срезов');
+        }
+
+        return response.json();
+    }
+
+    async listAnalyses(): Promise<{ success: boolean; data: AnalysisRecord[] }> {
+        const response = await fetch(`${this.baseUrl}/api/ml/analyses`, {
+            headers: this.authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Не удалось получить список анализов');
+        }
+
+        return response.json();
+    }
+
+    async getAnalysis(id: number): Promise<{ success: boolean; data: AnalysisRecord }> {
+        const response = await fetch(`${this.baseUrl}/api/ml/analyses/${id}`, {
+            headers: this.authHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Анализ не найден');
         }
 
         return response.json();

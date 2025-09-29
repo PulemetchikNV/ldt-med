@@ -1,54 +1,74 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import bcrypt from 'bcryptjs';
+import prisma from '../lib/prisma.js';
 
-interface UserData {
+interface AuthBody {
     email: string;
     password: string;
 }
 
-// Простое in-memory хранилище пользователей
-const users: Map<string, { email: string; password: string }> = new Map();
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export default async function authRoutes(fastify: FastifyInstance) {
-    // Регистрация
-    fastify.post('/register', async (request: FastifyRequest<{ Body: UserData }>, reply: FastifyReply) => {
-        const { email, password } = request.body;
+    fastify.post('/register', async (request: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
+        const rawEmail = request.body?.email ?? '';
+        const password = request.body?.password ?? '';
+        const email = normalizeEmail(rawEmail);
 
         if (!email || !password) {
             return reply.status(400).send({ error: 'Email и пароль обязательны' });
         }
 
-        if (users.has(email)) {
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
             return reply.status(400).send({ error: 'Пользователь уже существует' });
         }
 
-        users.set(email, { email, password });
-        const token = fastify.jwt.sign({ email });
+        const passwordHash = await bcrypt.hash(password, 10);
+        const user = await prisma.user.create({
+            data: {
+                email,
+                passwordHash
+            }
+        });
 
-        return reply.send({ token, email });
+        const token = fastify.jwt.sign({ userId: user.id, email: user.email });
+
+        return reply.send({
+            token,
+            email: user.email,
+            userId: user.id
+        });
     });
 
-    // Вход
-    fastify.post('/login', async (request: FastifyRequest<{ Body: UserData }>, reply: FastifyReply) => {
-        const { email, password } = request.body;
+    fastify.post('/login', async (request: FastifyRequest<{ Body: AuthBody }>, reply: FastifyReply) => {
+        const rawEmail = request.body?.email ?? '';
+        const password = request.body?.password ?? '';
+        const email = normalizeEmail(rawEmail);
 
         if (!email || !password) {
             return reply.status(400).send({ error: 'Email и пароль обязательны' });
         }
 
-        const user = users.get(email);
-        if (!user || user.password !== password) {
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
             return reply.status(401).send({ error: 'Неверные данные' });
         }
 
-        const token = fastify.jwt.sign({ email });
-        return reply.send({ token, email });
+        const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+        if (!passwordMatch) {
+            return reply.status(401).send({ error: 'Неверные данные' });
+        }
+
+        const token = fastify.jwt.sign({ userId: user.id, email: user.email });
+        return reply.send({ token, email: user.email, userId: user.id });
     });
 
-    // Проверка токена
     fastify.get('/verify', {
         preHandler: [fastify.authenticate]
     }, async (request: FastifyRequest, reply: FastifyReply) => {
-        return reply.send({ email: (request.user as any).email });
+        const userPayload = request.user as { userId: number; email: string };
+        return reply.send({ email: userPayload.email, userId: userPayload.userId });
     });
 }
 

@@ -1,4 +1,4 @@
-import Fastify, { FastifyInstance } from 'fastify';
+import Fastify, { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import jwt from '@fastify/jwt';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
@@ -25,7 +25,7 @@ fastify.register(multipart, {
 });
 
 // Добавляем декоратор для аутентификации
-fastify.decorate('authenticate', async function (request: any, reply: any) {
+fastify.decorate('authenticate', async function (request: FastifyRequest, reply: FastifyReply) {
     try {
         await request.jwtVerify();
     } catch (err) {

@@ -44,7 +44,7 @@ services:
       - PORT=3000
       - HOST=0.0.0.0
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ldt_med_db}
+      - DATABASE_URL=${DATABASE_URL}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - TRANSCRIPTION_URL=${TRANSCRIPTION_URL}
       - ENABLE_AI_RESPONSE=${ENABLE_AI_RESPONSE:-true}

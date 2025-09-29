@@ -12,6 +12,8 @@ RUN apk add --no-cache netcat-openbsd
 # Копирование исходного кода
 COPY . .
 
+RUN npx prisma generate
+
 EXPOSE 3000
 
 # Запуск в режиме разработки с автоперезагрузкой через tsx

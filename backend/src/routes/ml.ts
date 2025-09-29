@@ -1,6 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { MLService } from '../services/mlService.js';
 import { VolumeType } from '../types/ml.js';
+import prisma from '../lib/prisma.js';
+import { AnalysisType, Prisma } from '../generated/prisma/index.js';
+import type { Analysis } from '../generated/prisma/index.js';
 
 /**
  * Интерфейсы для параметров роутов
@@ -19,6 +22,98 @@ interface OrthogonalSlicesParams {
     patientId: string;
 }
 
+interface AnalysisIdParams {
+    id: string;
+}
+
+interface AuthenticatedUser {
+    userId: number;
+    email: string;
+}
+
+const getAuthenticatedUser = (request: FastifyRequest): AuthenticatedUser => {
+    const payload = request.user as AuthenticatedUser | undefined;
+    if (!payload?.userId) {
+        throw new Error('Отсутствует пользователь в JWT');
+    }
+    return payload;
+};
+
+const sanitizeMetadata = (result: unknown): Prisma.InputJsonValue | undefined => {
+    if (!result || typeof result !== 'object') {
+        return undefined;
+    }
+
+    const clone: Record<string, unknown> = { ...(result as Record<string, unknown>) };
+    delete clone['mask'];
+    delete clone['original_slice'];
+    delete clone['slice_data'];
+    delete clone['axial'];
+    delete clone['sagittal'];
+    delete clone['coronal'];
+    return clone as Prisma.InputJsonValue;
+};
+
+const toNullableBoolean = (value: unknown): boolean | null =>
+    typeof value === 'boolean' ? value : null;
+
+const toOptionalString = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 ? value : undefined;
+
+const persistAnalysis = async (params: {
+    userId: number;
+    analysisType: AnalysisType;
+    filename?: string;
+    result: Record<string, unknown>;
+}) => {
+    const metadata = sanitizeMetadata(params.result);
+    const hasTumorValue = toNullableBoolean(params.result['has_tumor']);
+    const analysis = await prisma.analysis.create({
+        data: {
+            userId: params.userId,
+            analysisType: params.analysisType,
+            inputFilename: params.filename ?? null,
+            patientId: toOptionalString(params.result['patient_id']) ?? null,
+            requestId: toOptionalString(params.result['request_id']) ?? null,
+            prediction: toOptionalString(params.result['prediction']) ?? null,
+            ...(hasTumorValue !== null ? { hasTumor: hasTumorValue } : {}),
+            ...(metadata !== undefined ? { metadata } : {}),
+        }
+    });
+
+    return analysis;
+};
+
+const mapAnalysisResponse = (analysis: Analysis | null) => {
+    if (!analysis) {
+        return null;
+    }
+    const { id, analysisType, inputFilename, patientId, requestId, prediction, hasTumor, createdAt, updatedAt, metadata } = analysis;
+    return {
+        id,
+        analysisType,
+        inputFilename,
+        patientId,
+        requestId,
+        prediction,
+        hasTumor,
+        createdAt,
+        updatedAt,
+        metadata
+    };
+};
+
+const ensurePatientOwnership = async (userId: number, patientId: string): Promise<Analysis | null> => {
+    const analysis = await prisma.analysis.findFirst({
+        where: {
+            userId,
+            patientId
+        }
+    });
+
+    return analysis;
+};
+
 /**
  * Роуты для работы с ML сервисом анализа опухолей
  */
@@ -28,10 +123,51 @@ export default async function mlRoutes(
 ): Promise<void> {
     const mlService = new MLService();
 
+    fastify.get('/analyses', {
+        preHandler: [fastify.authenticate]
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
+        const { userId } = getAuthenticatedUser(request);
+        const analyses = await prisma.analysis.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        return reply.send({
+            success: true,
+            data: analyses.map(mapAnalysisResponse)
+        });
+    });
+
+    fastify.get<{ Params: AnalysisIdParams }>('/analyses/:id', {
+        preHandler: [fastify.authenticate]
+    }, async (request: FastifyRequest<{ Params: AnalysisIdParams }>, reply: FastifyReply) => {
+        const { userId } = getAuthenticatedUser(request);
+        const id = Number(request.params.id);
+
+        if (!Number.isFinite(id)) {
+            return reply.code(400).send({ error: 'Некорректный идентификатор анализа' });
+        }
+
+        const analysis = await prisma.analysis.findFirst({
+            where: { id, userId }
+        });
+
+        if (!analysis) {
+            return reply.code(404).send({ error: 'Анализ не найден' });
+        }
+
+        return reply.send({
+            success: true,
+            data: mapAnalysisResponse(analysis)
+        });
+    });
+
     /**
      * POST /api/ml/predict/nifti - Анализ NIfTI файла
      */
-    fastify.post('/predict/nifti', async (request: FastifyRequest, reply: FastifyReply) => {
+    fastify.post('/predict/nifti', {
+        preHandler: [fastify.authenticate]
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const data = await request.file();
 
@@ -39,7 +175,6 @@ export default async function mlRoutes(
                 return reply.code(400).send({ error: 'Файл не предоставлен' });
             }
 
-            // Проверяем расширение файла
             const filename = data.filename;
             const isNifti = filename.endsWith('.nii') || filename.endsWith('.nii.gz');
 
@@ -55,22 +190,36 @@ export default async function mlRoutes(
 
             const result = await mlService.predictNifti(fileBuffer, filename);
 
-            // Проверяем, есть ли ошибка в ответе ML сервиса
-            if (result.error) {
+            if ((result as any)?.error) {
                 return reply.code(400).send({
                     error: 'Ошибка обработки ML сервиса',
-                    details: result.error
+                    details: (result as any).error
                 });
             }
 
+            const user = getAuthenticatedUser(request);
+            const resultObject = { ...(result as unknown as Record<string, unknown>) };
+            const analysis = await persistAnalysis({
+                userId: user.userId,
+                analysisType: AnalysisType.NIFTI,
+                filename,
+                result: resultObject
+            });
+
+            const responseData = {
+                ...resultObject,
+                analysis_id: analysis.id
+            };
+
             return reply.code(200).send({
                 success: true,
-                data: result,
-                filename
+                data: responseData,
+                filename,
+                analysisId: analysis.id
             });
 
         } catch (error) {
-            fastify.log.error('Ошибка при обработке NIfTI файла:', error);
+            fastify.log.error({ err: error }, 'Ошибка при обработке NIfTI файла');
             return reply.code(500).send({
                 error: 'Ошибка при обработке файла',
                 details: error instanceof Error ? error.message : 'Неизвестная ошибка'
@@ -81,7 +230,9 @@ export default async function mlRoutes(
     /**
      * POST /api/ml/predict/zip - Анализ ZIP архива с DICOM файлами
      */
-    fastify.post('/predict/zip', async (request: FastifyRequest, reply: FastifyReply) => {
+    fastify.post('/predict/zip', {
+        preHandler: [fastify.authenticate]
+    }, async (request: FastifyRequest, reply: FastifyReply) => {
         try {
             const data = await request.file();
 
@@ -89,7 +240,6 @@ export default async function mlRoutes(
                 return reply.code(400).send({ error: 'Файл не предоставлен' });
             }
 
-            // Проверяем расширение файла
             const filename = data.filename;
             const isZip = filename.endsWith('.zip');
 
@@ -105,22 +255,36 @@ export default async function mlRoutes(
 
             const result = await mlService.predictZip(fileBuffer, filename);
 
-            // Проверяем, есть ли ошибка в ответе ML сервиса
-            if (result.error) {
+            if ((result as any)?.error) {
                 return reply.code(400).send({
                     error: 'Ошибка обработки ML сервиса',
-                    details: result.error
+                    details: (result as any).error
                 });
             }
 
+            const user = getAuthenticatedUser(request);
+            const resultObject = { ...(result as unknown as Record<string, unknown>) };
+            const analysis = await persistAnalysis({
+                userId: user.userId,
+                analysisType: AnalysisType.DICOM_ZIP,
+                filename,
+                result: resultObject
+            });
+
+            const responseData = {
+                ...resultObject,
+                analysis_id: analysis.id
+            };
+
             return reply.code(200).send({
                 success: true,
-                data: result,
-                filename
+                data: responseData,
+                filename,
+                analysisId: analysis.id
             });
 
         } catch (error) {
-            fastify.log.error('Ошибка при обработке ZIP архива:', error);
+            fastify.log.error({ err: error }, 'Ошибка при обработке ZIP архива');
             return reply.code(500).send({
                 error: 'Ошибка при обработке архива',
                 details: error instanceof Error ? error.message : 'Неизвестная ошибка'
@@ -133,6 +297,9 @@ export default async function mlRoutes(
      */
     fastify.get<{ Params: SliceParams }>(
         '/slice/:patientId/:volumeType/:sliceIndex',
+        {
+            preHandler: [fastify.authenticate]
+        },
         async (request: FastifyRequest<{ Params: SliceParams }>, reply: FastifyReply) => {
             try {
                 const { patientId, volumeType, sliceIndex } = request.params;
@@ -157,6 +324,13 @@ export default async function mlRoutes(
                     });
                 }
 
+                const { userId } = getAuthenticatedUser(request);
+                const analysis = await ensurePatientOwnership(userId, patientId);
+
+                if (!analysis) {
+                    return reply.code(404).send({ error: 'Анализ не найден или недоступен' });
+                }
+
                 fastify.log.info(`Запрос среза: пациент=${patientId}, тип=${volumeType}, индекс=${sliceIndexNum}`);
 
                 const result = await mlService.getSlice(patientId, volumeType as VolumeType, sliceIndexNum);
@@ -171,7 +345,7 @@ export default async function mlRoutes(
                 });
 
             } catch (error) {
-                fastify.log.error('Ошибка при получении среза:', error);
+                fastify.log.error({ err: error }, 'Ошибка при получении среза');
                 return reply.code(500).send({
                     error: 'Ошибка при получении среза',
                     details: error instanceof Error ? error.message : 'Неизвестная ошибка'
@@ -194,7 +368,7 @@ export default async function mlRoutes(
             });
 
         } catch (error) {
-            fastify.log.error('ML сервис недоступен:', error);
+            fastify.log.error({ err: error }, 'ML сервис недоступен');
             return reply.code(503).send({
                 error: 'ML сервис недоступен',
                 details: error instanceof Error ? error.message : 'Неизвестная ошибка',
@@ -208,6 +382,9 @@ export default async function mlRoutes(
      */
     fastify.get<{ Params: VolumeMetaParams; Querystring: { volume_type?: string } }>(
         '/volume/:patientId/meta',
+        {
+            preHandler: [fastify.authenticate]
+        },
         async (request: FastifyRequest<{ Params: VolumeMetaParams; Querystring: { volume_type?: string } }>, reply: FastifyReply) => {
             try {
                 const { patientId } = request.params;
@@ -217,6 +394,13 @@ export default async function mlRoutes(
                     return reply.code(400).send({
                         error: 'Необходим параметр patientId'
                     });
+                }
+
+                const { userId } = getAuthenticatedUser(request);
+                const analysis = await ensurePatientOwnership(userId, patientId);
+
+                if (!analysis) {
+                    return reply.code(404).send({ error: 'Анализ не найден или недоступен' });
                 }
 
                 if (!['original', 'mask'].includes(volume_type)) {
@@ -236,7 +420,7 @@ export default async function mlRoutes(
                 return reply.code(200).send(result);
 
             } catch (error) {
-                fastify.log.error('Ошибка при получении метаданных объема:', error);
+                fastify.log.error({ err: error }, 'Ошибка при получении метаданных объема');
                 return reply.code(500).send({
                     error: 'Ошибка при получении метаданных объема',
                     details: error instanceof Error ? error.message : 'Неизвестная ошибка'
@@ -263,6 +447,9 @@ export default async function mlRoutes(
         }
     }>(
         '/orthoslices/:patientId',
+        {
+            preHandler: [fastify.authenticate]
+        },
         async (request: FastifyRequest<{
             Params: OrthogonalSlicesParams;
             Querystring: {
@@ -292,6 +479,13 @@ export default async function mlRoutes(
                     return reply.code(400).send({
                         error: 'Необходим параметр patientId'
                     });
+                }
+
+                const { userId } = getAuthenticatedUser(request);
+                const analysis = await ensurePatientOwnership(userId, patientId);
+
+                if (!analysis) {
+                    return reply.code(404).send({ error: 'Анализ не найден или недоступен' });
                 }
 
                 // Валидация координат
@@ -337,16 +531,36 @@ export default async function mlRoutes(
                 } = {
                     i: iNum,
                     j: jNum,
-                    k: kNum,
-                    modality: modality as 'original' | 'mask',
-                    alpha: alpha ? parseFloat(alpha) : undefined,
-                    wl: wl ? parseFloat(wl) : undefined,
-                    ww: ww ? parseFloat(ww) : undefined,
-                    scale: scale ? parseFloat(scale) : undefined
+                    k: kNum
                 };
 
+                params.modality = modality as 'original' | 'mask';
                 if (overlay) {
                     params.overlay = 'mask';
+                }
+                if (alpha !== undefined) {
+                    const alphaNum = parseFloat(alpha);
+                    if (!Number.isNaN(alphaNum)) {
+                        params.alpha = alphaNum;
+                    }
+                }
+                if (wl !== undefined) {
+                    const wlNum = parseFloat(wl);
+                    if (!Number.isNaN(wlNum)) {
+                        params.wl = wlNum;
+                    }
+                }
+                if (ww !== undefined) {
+                    const wwNum = parseFloat(ww);
+                    if (!Number.isNaN(wwNum)) {
+                        params.ww = wwNum;
+                    }
+                }
+                if (scale !== undefined) {
+                    const scaleNum = parseFloat(scale);
+                    if (!Number.isNaN(scaleNum)) {
+                        params.scale = scaleNum;
+                    }
                 }
 
                 fastify.log.info(`Запрос ортогональных срезов: пациент=${patientId}, координаты=${iNum},${jNum},${kNum}`);
@@ -360,7 +574,7 @@ export default async function mlRoutes(
                 return reply.code(200).send(result);
 
             } catch (error) {
-                fastify.log.error('Ошибка при получении ортогональных срезов:', error);
+                fastify.log.error({ err: error }, 'Ошибка при получении ортогональных срезов');
                 return reply.code(500).send({
                     error: 'Ошибка при получении ортогональных срезов',
                     details: error instanceof Error ? error.message : 'Неизвестная ошибка'

@@ -73,7 +73,7 @@ const triggerFileInput = () => {
   }
 };
 
-const onDragOver = (e: DragEvent) => {
+const onDragOver = () => {
   if (!props.disabled && !isUploading.value) {
     isDragOver.value = true;
   }
@@ -85,16 +85,18 @@ const onDragLeave = () => {
 
 const onDrop = (e: DragEvent) => {
   isDragOver.value = false;
-  if (!props.disabled && !isUploading.value && e.dataTransfer?.files.length) {
-    const file = e.dataTransfer.files[0];
+  const fileList = e.dataTransfer?.files;
+  if (!props.disabled && !isUploading.value && fileList && fileList.length > 0) {
+    const file = fileList[0];
     uploadFile(file);
   }
 };
 
 const onFileSelect = (e: Event) => {
   const target = e.target as HTMLInputElement;
-  if (target.files?.length) {
-    const file = target.files[0];
+  const files = target.files;
+  if (files && files.length > 0) {
+    const file = files[0];
     uploadFile(file);
   }
 };
@@ -123,6 +125,13 @@ const uploadFile = async (file: File) => {
   const validationError = validateFile(file);
   if (validationError) {
     error.value = validationError;
+    return;
+  }
+
+  if (!localStorage.getItem('token')) {
+    const authError = 'Необходимо войти в систему перед запуском анализа';
+    error.value = authError;
+    emit('upload-error', authError);
     return;
   }
   

@@ -8,6 +8,8 @@ export interface MLPredictionResult {
     mask_image?: string;
     request_id?: string;
     patient_id?: string;
+    total_slices?: number;
+    analysis_id?: number;
     error?: string;
 }
 
@@ -26,6 +28,8 @@ export interface MLPredictZipResult {
     patient_id?: string;
     has_tumor?: boolean;
     prediction?: string;
+    total_slices?: number;
+    analysis_id?: number;
     error?: string;
 }
 

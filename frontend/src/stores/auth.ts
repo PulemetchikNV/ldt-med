@@ -5,7 +5,7 @@ const API_BASE = 'http://localhost:3000/api';
 
 export const useAuthStore = defineStore('auth', () => {
     const token = ref(localStorage.getItem('token'));
-    const user = ref<{ email: string } | null>(null);
+    const user = ref<{ id: number; email: string } | null>(null);
     const isAuthenticated = ref(!!token.value);
 
     const login = async (email: string, password: string) => {
@@ -23,9 +23,10 @@ export const useAuthStore = defineStore('auth', () => {
 
         const data = await response.json();
         token.value = data.token;
-        user.value = { email: data.email };
+        user.value = { id: data.userId, email: data.email };
         isAuthenticated.value = true;
         localStorage.setItem('token', data.token);
+        localStorage.setItem('userId', String(data.userId));
     };
 
     const register = async (email: string, password: string) => {
@@ -43,9 +44,10 @@ export const useAuthStore = defineStore('auth', () => {
 
         const data = await response.json();
         token.value = data.token;
-        user.value = { email: data.email };
+        user.value = { id: data.userId, email: data.email };
         isAuthenticated.value = true;
         localStorage.setItem('token', data.token);
+        localStorage.setItem('userId', String(data.userId));
     };
 
     const logout = () => {
@@ -53,6 +55,7 @@ export const useAuthStore = defineStore('auth', () => {
         user.value = null;
         isAuthenticated.value = false;
         localStorage.removeItem('token');
+        localStorage.removeItem('userId');
     };
 
     const checkAuth = async () => {
@@ -66,8 +69,9 @@ export const useAuthStore = defineStore('auth', () => {
 
             if (response.ok) {
                 const data = await response.json();
-                user.value = { email: data.email };
+                user.value = { id: data.userId, email: data.email };
                 isAuthenticated.value = true;
+                localStorage.setItem('userId', String(data.userId));
             } else {
                 logout();
             }

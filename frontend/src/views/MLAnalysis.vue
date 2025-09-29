@@ -79,10 +79,13 @@
         >
           <div class="history-info">
             <span class="history-filename">{{ item.filename }}</span>
-            <span class="history-date">{{ formatDate(item.timestamp) }}</span>
+            <div class="history-meta">
+              <span class="history-type">{{ item.analysisType === 'NIFTI' ? 'NIfTI' : 'DICOM ZIP' }}</span>
+              <span class="history-date">{{ formatDate(item.createdAt) }}</span>
+            </div>
           </div>
-          <div class="history-result" :class="{ 'tumor': item.has_tumor }">
-            {{ item.prediction }}
+          <div class="history-result" :class="{ 'tumor': item.hasTumor }">
+            {{ item.prediction ?? 'Нет данных' }}
           </div>
         </div>
       </div>
@@ -91,27 +94,31 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, reactive, watch } from 'vue';
 import FileUploader from '../components/FileUploader.vue';
 import MLResults from '../components/MLResults.vue';
 import OrthogonalViewer from '../components/OrthogonalViewer.vue';
 import { MLApiService } from '../services/mlApi';
 import type { MLPredictionResult } from '../services/mlApi';
+import { useAuthStore } from '../stores/auth';
 
 interface HistoryItem {
-  id: string;
+  id: number;
   filename: string;
-  prediction: string;
-  has_tumor: boolean;
-  timestamp: Date;
-  result: MLPredictionResult;
+  analysisType: 'NIFTI' | 'DICOM_ZIP';
+  prediction: string | null;
+  hasTumor: boolean | null;
+  createdAt: string;
+  patientId: string | null;
 }
 
 const mlApi = new MLApiService();
+const authStore = useAuthStore();
 
 // Состояние
 const analysisResult = ref<MLPredictionResult | null>(null);
 const analysisHistory = ref<HistoryItem[]>([]);
+const loadingHistory = ref(false);
 const serviceHealthy = ref<boolean | null>(null);
 const checkingHealth = ref(false);
 
@@ -146,6 +153,31 @@ const serviceStatusText = computed(() => {
 });
 
 // Методы
+const fetchAnalysisHistory = async () => {
+  if (!authStore.isAuthenticated) {
+    analysisHistory.value = [];
+    return;
+  }
+
+  try {
+    loadingHistory.value = true;
+    const response = await mlApi.listAnalyses();
+    analysisHistory.value = response.data.map(item => ({
+      id: item.id,
+      filename: item.inputFilename ?? 'Без названия',
+      analysisType: item.analysisType,
+      prediction: item.prediction ?? null,
+      hasTumor: item.hasTumor ?? null,
+      createdAt: item.createdAt,
+      patientId: item.patientId
+    }));
+  } catch (error) {
+    console.error('Failed to fetch analysis history:', error);
+  } finally {
+    loadingHistory.value = false;
+  }
+};
+
 const checkServiceHealth = async () => {
   checkingHealth.value = true;
   try {
@@ -162,21 +194,8 @@ const checkServiceHealth = async () => {
 const onUploadSuccess = async (result: MLPredictionResult) => {
   analysisResult.value = result;
   
-  // Добавляем в историю
-  const historyItem: HistoryItem = {
-    id: Date.now().toString(),
-    filename: result.filename,
-    prediction: result.data.prediction,
-    has_tumor: result.data.has_tumor,
-    timestamp: new Date(),
-    result
-  };
-  
-  analysisHistory.value.unshift(historyItem);
-  
-  // Сохраняем историю в localStorage
-  saveHistoryToStorage();
-  
+  await fetchAnalysisHistory();
+
   // Если это ZIP результат с patient_id, загружаем метаданные и ортосрезы
   if (result.data.patient_id) {
     await loadOrthogonalData(result.data.patient_id);
@@ -192,45 +211,54 @@ const startNewAnalysis = () => {
   analysisResult.value = null;
 };
 
-const loadHistoryItem = (item: HistoryItem) => {
-  analysisResult.value = item.result;
+const loadHistoryItem = async (item: HistoryItem) => {
+  try {
+    const response = await mlApi.getAnalysis(item.id);
+    const data = response.data;
+    const metadata = (data.metadata ?? {}) as Record<string, unknown>;
+
+    const prediction = data.prediction ?? (metadata['prediction'] as string) ?? 'Неизвестно';
+    const hasTumor = data.hasTumor ?? (metadata['has_tumor'] as boolean | undefined) ?? false;
+    const maskImage = metadata['mask_image'] as string | undefined;
+    const patientId = data.patientId ?? (metadata['patient_id'] as string | undefined) ?? null;
+    const totalSlices = (metadata['total_slices'] ?? metadata['totalSlices']) as number | undefined;
+
+    const result: MLPredictionResult = {
+      success: true,
+      filename: data.inputFilename ?? item.filename,
+      data: {
+        prediction,
+        has_tumor: Boolean(hasTumor),
+        mask_image: maskImage,
+        request_id: (metadata['request_id'] ?? data.requestId ?? undefined) as string | undefined,
+        patient_id: patientId || undefined,
+        message: metadata['message'] as string | undefined,
+        total_slices: typeof totalSlices === 'number' ? totalSlices : undefined,
+        analysis_id: data.id
+      },
+      analysisId: data.id
+    };
+
+    analysisResult.value = result;
+
+    if (result.data.patient_id) {
+      await loadOrthogonalData(result.data.patient_id);
+    } else {
+      showOrthogonalViewer.value = false;
+    }
+  } catch (error) {
+    console.error('Failed to load analysis details:', error);
+  }
 };
 
-const formatDate = (date: Date) => {
+const formatDate = (isoString: string) => {
   return new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
-  }).format(date);
-};
-
-const saveHistoryToStorage = () => {
-  try {
-    const historyData = analysisHistory.value.map(item => ({
-      ...item,
-      timestamp: item.timestamp.toISOString()
-    }));
-    localStorage.setItem('ml-analysis-history', JSON.stringify(historyData));
-  } catch (error) {
-    console.error('Failed to save history:', error);
-  }
-};
-
-const loadHistoryFromStorage = () => {
-  try {
-    const stored = localStorage.getItem('ml-analysis-history');
-    if (stored) {
-      const historyData = JSON.parse(stored);
-      analysisHistory.value = historyData.map((item: any) => ({
-        ...item,
-        timestamp: new Date(item.timestamp)
-      }));
-    }
-  } catch (error) {
-    console.error('Failed to load history:', error);
-  }
+  }).format(new Date(isoString));
 };
 
 // Методы для трехмерного просмотра
@@ -315,8 +343,21 @@ const onPlaneClick = async (plane: string, coords: { i: number; j: number; k: nu
 // Жизненный цикл
 onMounted(() => {
   checkServiceHealth();
-  loadHistoryFromStorage();
+  fetchAnalysisHistory();
 });
+
+watch(
+  () => authStore.isAuthenticated,
+  (isAuthenticated) => {
+    if (isAuthenticated) {
+      fetchAnalysisHistory();
+    } else {
+      analysisHistory.value = [];
+      analysisResult.value = null;
+      showOrthogonalViewer.value = false;
+    }
+  }
+);
 </script>
 
 <style scoped>
@@ -483,6 +524,22 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.history-type {
+  background-color: #f3f4f6;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .history-filename {

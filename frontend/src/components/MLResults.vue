@@ -111,7 +111,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { MLApiService } from '../services/mlApi';
 import type { MLPredictionResult } from '../services/mlApi';
 
@@ -119,19 +119,14 @@ interface Props {
   result: MLPredictionResult;
 }
 
-interface Emits {
-  (e: 'new-analysis'): void;
-}
-
 const props = defineProps<Props>();
-const emit = defineEmits<Emits>();
+defineEmits<{ (e: 'new-analysis'): void }>();
 
 const mlApi = new MLApiService();
 
-// Состояние для просмотра срезов
 const selectedVolumeType = ref<'original' | 'mask'>('original');
-const currentSlice = ref(50); // Начинаем с середины
-const totalSlices = ref(100); // Примерное количество срезов
+const currentSlice = ref(0);
+const totalSlices = ref(1);
 const currentSliceImage = ref('');
 const loadingSlice = ref(false);
 const sliceError = ref('');
@@ -141,27 +136,31 @@ const predictionClass = computed(() => ({
   'no-tumor': !props.result.data.has_tumor
 }));
 
-const predictionDescription = computed(() => {
-  if (props.result.data.has_tumor) {
-    return 'Обнаружены признаки патологических изменений';
-  } else {
-    return 'Патологические изменения не обнаружены';
-  }
-});
+const predictionDescription = computed(() =>
+  props.result.data.has_tumor
+    ? 'Обнаружены признаки патологических изменений'
+    : 'Патологические изменения не обнаружены'
+);
+
+const initialiseSlices = () => {
+  const total = props.result.data.total_slices ?? 1;
+  totalSlices.value = Math.max(total, 1);
+  currentSlice.value = Math.floor(totalSlices.value / 2);
+};
 
 const loadSlice = async () => {
   if (!props.result.data.patient_id) return;
-  
+
   loadingSlice.value = true;
   sliceError.value = '';
-  
+
   try {
     const response = await mlApi.getSlice(
       props.result.data.patient_id,
       selectedVolumeType.value,
       currentSlice.value
     );
-    
+
     currentSliceImage.value = response.data.slice_data;
   } catch (error) {
     sliceError.value = error instanceof Error ? error.message : 'Ошибка загрузки среза';
@@ -192,14 +191,15 @@ const downloadResults = () => {
     has_tumor: props.result.data.has_tumor,
     timestamp: new Date().toISOString(),
     request_id: props.result.data.request_id,
-    patient_id: props.result.data.patient_id
+    patient_id: props.result.data.patient_id,
+    analysis_id: props.result.analysisId ?? props.result.data.analysis_id
   };
-  
+
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `ml_analysis_${Date.now()}.json`;
+  a.download = 'ml_analysis_' + Date.now() + '.json';
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -207,11 +207,23 @@ const downloadResults = () => {
 };
 
 onMounted(() => {
-  // Если есть patient_id, загружаем первый срез
+  initialiseSlices();
   if (props.result.data.patient_id) {
     loadSlice();
   }
 });
+
+watch(
+  () => props.result,
+  (newResult) => {
+    initialiseSlices();
+    if (newResult.data.patient_id) {
+      loadSlice();
+    } else {
+      currentSliceImage.value = '';
+    }
+  }
+);
 </script>
 
 <style scoped>
