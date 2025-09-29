@@ -326,19 +326,125 @@ const onCoordsChange = async (coords: { i: number; j: number; k: number }) => {
   await loadOrthogonalSlices(analysisResult.value.data.patient_id);
 };
 
-const onPlaneClick = async (plane: string, coords: { i: number; j: number; k: number }, pixelCoords: { x: number; y: number }) => {
-  console.log(`Clicked on ${plane} plane at coords:`, coords, 'pixel:', pixelCoords);
-  
-  // Обновляем координаты
-  currentCoords.i = coords.i;
-  currentCoords.j = coords.j;
-  currentCoords.k = coords.k;
-  
-  // Перезагружаем срезы с новыми координатами
-  if (analysisResult.value?.data.patient_id) {
-    await loadOrthogonalSlices(analysisResult.value.data.patient_id);
+type Coords = { i: number; j: number; k: number }
+type PixelCoords = {
+  x: number
+  y: number
+  containerWidth: number
+  containerHeight: number
+  imageWidth: number
+  imageHeight: number
+}
+
+type Plane = 'sagittal' | 'coronal' | 'axial'
+
+const planeTurn: Record<Plane, 0 | 90 | 180 | 270> = {
+  sagittal: 270,
+  coronal: 270,
+  axial: 270,
+}
+
+const applyTurn = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  turn: 0 | 90 | 180 | 270
+) => {
+  switch (turn) {
+    case 90:
+      return {
+        x: height - 1 - y,
+        y: x,
+        width: height,
+        height: width,
+      }
+    case 180:
+      return {
+        x: width - 1 - x,
+        y: height - 1 - y,
+        width,
+        height,
+      }
+    case 270:
+      return {
+        x: y,
+        y: width - 1 - x,
+        width: height,
+        height: width,
+      }
+    default:
+      return { x, y, width, height }
   }
-};
+}
+
+const onPlaneClick = async (plane: Plane, oldCoords: Coords, pixelCoords: PixelCoords) => {
+  if (!volumeShape.value || volumeShape.value.length < 3) {
+    return
+  }
+
+  const axisOrder: Record<keyof Coords, number> = { i: 0, j: 1, k: 2 }
+  const planeMapping: Record<Plane, { x: keyof Coords; y: keyof Coords }> = {
+    sagittal: { x: 'j', y: 'k' },
+    coronal: { x: 'i', y: 'k' },
+    axial: { x: 'i', y: 'j' }
+  }
+
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
+
+  const convertPixelCoords = (clickedPlane: Plane, pixels: PixelCoords, source: Coords): Coords => {
+    const mapping = planeMapping[clickedPlane]
+    const baseWidth = 256
+    const baseHeight = 256
+    const displayWidth = pixels.imageWidth || baseWidth
+    const displayHeight = pixels.imageHeight || baseHeight
+    const containerWidth = pixels.containerWidth || displayWidth
+    const containerHeight = pixels.containerHeight || displayHeight
+    const xMargin = Math.max((containerWidth - displayWidth) / 2, 0)
+    const yMargin = Math.max((containerHeight - displayHeight) / 2, 0)
+
+    if (!mapping) {
+      return { ...source }
+    }
+
+    const adjustedX = clamp(pixels.x - xMargin, 0, displayWidth - 1)
+    const adjustedY = clamp(pixels.y - yMargin, 0, displayHeight - 1)
+
+    const { x: rotatedX, y: rotatedY, width: rotatedWidth, height: rotatedHeight } =
+      applyTurn(adjustedX, adjustedY, displayWidth, displayHeight, planeTurn[clickedPlane] ?? 0)
+
+    const normalizedX = rotatedWidth > 1 ? rotatedX / (rotatedWidth - 1) : 0
+    const normalizedY = rotatedHeight > 1 ? rotatedY / (rotatedHeight - 1) : 0
+
+    const result: Coords = { ...source }
+
+    const xAxis = mapping.x
+    const yAxis = mapping.y
+    const xMax = Math.max((volumeShape.value[axisOrder[xAxis]] || 1) - 1, 0)
+    const yMax = Math.max((volumeShape.value[axisOrder[yAxis]] || 1) - 1, 0)
+
+    result[xAxis] = clamp(Math.round(normalizedX * xMax), 0, xMax)
+    result[yAxis] = clamp(Math.round(normalizedY * yMax), 0, yMax)
+
+    return result
+  }
+
+  const nextCoords = convertPixelCoords(plane, pixelCoords, oldCoords)
+
+  const didChange =
+    nextCoords.i !== currentCoords.i ||
+    nextCoords.j !== currentCoords.j ||
+    nextCoords.k !== currentCoords.k
+
+  currentCoords.i = nextCoords.i
+  currentCoords.j = nextCoords.j
+  currentCoords.k = nextCoords.k
+
+  if (didChange && analysisResult.value?.data.patient_id) {
+    await loadOrthogonalSlices(analysisResult.value.data.patient_id)
+  }
+}
+
 
 // Жизненный цикл
 onMounted(() => {

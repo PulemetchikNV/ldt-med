@@ -195,10 +195,17 @@ interface MouseCoords {
   y: number;
 }
 
-interface PlaneMouseCoords {
-  sagittal: MouseCoords | null;
-  coronal: MouseCoords | null;
-  axial: MouseCoords | null;
+type PlaneName = 'sagittal' | 'coronal' | 'axial'
+
+type PlaneMouseCoords = Record<PlaneName, MouseCoords | null>
+
+type PlanePixelCoords = {
+  x: number
+  y: number
+  containerWidth: number
+  containerHeight: number
+  imageWidth: number
+  imageHeight: number
 }
 
 interface Props {
@@ -215,7 +222,7 @@ interface SliderState {
 
 interface Emits {
   (e: 'coords-change', coords: Coordinates): void;
-  (e: 'plane-click', plane: string, coords: Coordinates, pixelCoords: { x: number; y: number }): void;
+  (e: 'plane-click', plane: PlaneName, coords: Coordinates, pixelCoords: PlanePixelCoords): void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -280,28 +287,38 @@ const onSliderEnd = () => {
   }
 };
 
-const onPlaneClick = (plane: string, event: MouseEvent) => {
+const onPlaneClick = (plane: PlaneName, event: MouseEvent) => {
   // Очищаем debounce таймер при клике (мгновенный отклик)
   if (debounceTimer) {
     clearTimeout(debounceTimer);
   }
   
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const container = event.currentTarget as HTMLElement;
+  const rect = container.getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
-  
-  // Конвертируем пиксельные координаты в воксельные
-  const pixelCoords = { x: Math.round(x), y: Math.round(y) };
-  
+
+  const image = container.querySelector('img') as HTMLImageElement | null;
+  const imageRect = image?.getBoundingClientRect();
+
+  const pixelCoords = {
+    x: Math.round(x),
+    y: Math.round(y),
+    containerWidth: rect.width,
+    containerHeight: rect.height,
+    imageWidth: imageRect?.width ?? rect.width,
+    imageHeight: imageRect?.height ?? rect.height
+  };
+
   emit('plane-click', plane, { ...currentCoords }, pixelCoords);
 };
 
-const onMouseMove = (plane: string, event: MouseEvent) => {
+const onMouseMove = (plane: PlaneName, event: MouseEvent) => {
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   
-  mouseCoords[plane as keyof PlaneMouseCoords] = { 
+  mouseCoords[plane] = { 
     x: Math.round(x), 
     y: Math.round(y) 
   };
