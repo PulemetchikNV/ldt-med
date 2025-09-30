@@ -2,9 +2,11 @@
   <div class="dicom-insights">
     <div class="content-wrapper">
       <Card class="intro-card">
-        <template #title>Анализ одиночного DICOM файла</template>
+        <template #title>
+          <h4 class="card-title">Анализ одиночного DICOM файла</h4>
+        </template>
         <template #subtitle>
-          Загрузите файл формата .dcm, укажите запрос для ML модели и получите текстовый анализ вместе с вероятностями классов.
+          <p class="card-subtitle">Загрузите файл формата .dcm, укажите запрос для ML модели и получите текстовый анализ вместе с вероятностями классов.</p>
         </template>
         <template #content>
           <div class="form-grid">
@@ -222,7 +224,7 @@ const runAnalysis = async () => {
 <style scoped>
 .dicom-insights {
   padding: 2rem 1rem;
-  background: linear-gradient(180deg, #f9fafb 0%, #ffffff 60%);
+  /* background: linear-gradient(180deg, #f9fafb 0%, #ffffff 60%); */
   min-height: calc(100vh - 60px);
 }
 
@@ -249,6 +251,21 @@ const runAnalysis = async () => {
 label {
   font-weight: 600;
   color: #1f2937;
+  text-align: start;
+}
+
+.card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+  text-align: start;
+}
+
+.card-subtitle {
+  font-size: 0.875rem;
+  color: #6b7280;
+  text-align: start;
+  margin-bottom: 2rem;
 }
 
 .file-name {

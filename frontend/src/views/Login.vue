@@ -1,24 +1,9 @@
 <template>
   <div class="auth-page">
     <section class="brand-panel">
-      <div class="brand-logo" aria-hidden="true">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="login-logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#0d6efd" />
-              <stop offset="100%" stop-color="#1a9c8f" />
-            </linearGradient>
-          </defs>
-          <rect x="8" y="8" width="48" height="48" rx="12" fill="url(#login-logo-gradient)" />
-          <path
-            d="M32 18c.9 0 1.7.73 1.74 1.63l.01.12v10.5h10.5a1.75 1.75 0 0 1 0 3.5h-10.5v10.5a1.75 1.75 0 0 1-3.49.12l-.01-.12V33.75H19.75a1.75 1.75 0 0 1-.12-3.49l.12-.01H30.5v-10.5a1.75 1.75 0 0 1 1.5-1.73z"
-            fill="#f1f5f9"
-          />
-        </svg>
-      </div>
-      <h1>Классификация КТ ОГК</h1>
+      <img src="../assets/logo.png" alt="Логотип" class="brand-logo-img" />
       <p>
-        Профессиональный инструмент для быстрой проверки исследований и выделения патологий в рамках 
+        Профессиональный инструмент для быстрой проверки исследований и выделения патологий в рамках
         городского эксперимента по ИИ-диагностике.
       </p>
     </section>
@@ -112,24 +97,17 @@ const handleLogin = async () => {
 .brand-panel {
   padding: 48px 32px 16px;
   text-align: center;
-}
-
-.brand-logo {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 20px;
-  border-radius: 24px;
-  box-shadow: 0 12px 24px rgba(13, 110, 253, 0.16);
+  gap: 24px;
 }
 
-.brand-panel h1 {
-  margin: 0 0 12px;
-  font-size: 1.9rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+.brand-logo-img {
+  max-width: 400px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .brand-panel p {

@@ -50,6 +50,15 @@ export class MLService {
             });
         }
 
+        // Логи запроса
+        try {
+            console.info('[MLService.analyze] → POST', analyzeUrl);
+            console.info('[MLService.analyze] Payload', {
+                textPromptPreview: typeof textPrompt === 'string' ? textPrompt.slice(0, 200) : undefined,
+                file: fileBuffer && filename ? { filename, size: fileBuffer.length } : null
+            });
+        } catch {}
+
         const response = await fetch(analyzeUrl, {
             method: 'POST',
             body: formData as any,
@@ -57,11 +66,33 @@ export class MLService {
             signal: AbortSignal.timeout(this.config.timeout)
         });
 
-        if (!response.ok) {
-            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        // Читаем тело ответа один раз, чтобы можно было и залогировать, и вернуть
+        let responseBody: unknown;
+        try {
+            responseBody = await response.json();
+        } catch {
+            try {
+                responseBody = await response.text();
+            } catch {
+                responseBody = undefined;
+            }
         }
 
-        return response.json() as Promise<MLAnalyzeResponse>;
+        // Логи ответа
+        try {
+            console.info('[MLService.analyze] ← Response', {
+                status: response.status,
+                statusText: response.statusText,
+                body: responseBody
+            });
+        } catch {}
+
+        if (!response.ok) {
+            const bodyForError = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+            throw new Error(`ML service error: ${response.status} ${response.statusText}; body: ${bodyForError}`);
+        }
+
+        return responseBody as MLAnalyzeResponse;
     }
 
     /**
@@ -74,18 +105,50 @@ export class MLService {
             contentType: 'application/dicom'
         });
 
-        const response = await fetch(`${this.config.dicomClassifyUrl}`, {
+        const url = `${this.config.dicomClassifyUrl}`;
+
+        // Логи запроса
+        try {
+            console.info('[MLService.classifyDicom] → POST', url);
+            console.info('[MLService.classifyDicom] Payload', {
+                file: { filename, size: fileBuffer.length }
+            });
+        } catch {}
+
+        const response = await fetch(url, {
             method: 'POST',
             body: formData as any,
             headers: formData.getHeaders(),
             signal: AbortSignal.timeout(this.config.timeout)
         });
 
-        if (!response.ok) {
-            throw new Error(`ML service error: ${response.status} ${response.statusText}`);
+        // Читаем тело ответа один раз, чтобы можно было и залогировать, и вернуть
+        let responseBody: unknown;
+        try {
+            responseBody = await response.json();
+        } catch {
+            try {
+                responseBody = await response.text();
+            } catch {
+                responseBody = undefined;
+            }
         }
 
-        return response.json() as Promise<MLClassifyDicomResponse>;
+        // Логи ответа
+        try {
+            console.info('[MLService.classifyDicom] ← Response', {
+                status: response.status,
+                statusText: response.statusText,
+                body: responseBody
+            });
+        } catch {}
+
+        if (!response.ok) {
+            const bodyForError = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+            throw new Error(`ML service error: ${response.status} ${response.statusText}; body: ${bodyForError}`);
+        }
+
+        return responseBody as MLClassifyDicomResponse;
     }
 
     /**

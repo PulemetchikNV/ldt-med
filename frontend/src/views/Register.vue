@@ -1,22 +1,7 @@
 <template>
   <div class="auth-page">
     <section class="brand-panel">
-      <div class="brand-logo" aria-hidden="true">
-        <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="register-logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#0d6efd" />
-              <stop offset="100%" stop-color="#f97316" />
-            </linearGradient>
-          </defs>
-          <rect x="8" y="8" width="48" height="48" rx="12" fill="url(#register-logo-gradient)" />
-          <path
-            d="M32 17.5c7.99 0 14.5 6.51 14.5 14.5S39.99 46.5 32 46.5c-2.53 0-4.91-.65-6.97-1.78l-7.51 2.17 2.17-7.5A14.46 14.46 0 0 1 17.5 32C17.5 24.01 24.01 17.5 32 17.5Zm0 5.5a1.5 1.5 0 0 0-1.5 1.5v5.5h-5.5a1.5 1.5 0 0 0-.14 2.99l.14.01h5.5v5.5a1.5 1.5 0 0 0 2.99.14l.01-.14v-5.5h5.5a1.5 1.5 0 0 0 .14-2.99l-.14-.01h-5.5V24.5A1.5 1.5 0 0 0 32 23Z"
-            fill="#f8fafc"
-          />
-        </svg>
-      </div>
-      <h1>Классификация КТ ОГК</h1>
+      <img src="../assets/logo.png" alt="Логотип" class="brand-logo-img" />
       <p>
         Зарегистрируйтесь, чтобы подключить сервис к рабочему процессу и получать мгновенные решения по норме и патологиям.
       </p>
@@ -111,24 +96,17 @@ const handleRegister = async () => {
 .brand-panel {
   padding: 48px 32px 16px;
   text-align: center;
-}
-
-.brand-logo {
-  display: inline-flex;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 20px;
-  border-radius: 24px;
-  box-shadow: 0 12px 24px rgba(13, 110, 253, 0.16);
+  gap: 24px;
 }
 
-.brand-panel h1 {
-  margin: 0 0 12px;
-  font-size: 1.9rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+.brand-logo-img {
+  max-width: 400px;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
 }
 
 .brand-panel p {

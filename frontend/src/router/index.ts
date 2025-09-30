@@ -12,12 +12,12 @@ const routes = [
     {
         path: '/dashboard',
         component: Dashboard,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true, layout: 'app' }
     },
     {
         path: '/ml-analysis',
         component: DicomInsights,
-        meta: { requiresAuth: true }
+        meta: { requiresAuth: true, layout: 'app' }
     }
 ];
 

@@ -1,175 +1,146 @@
 <template>
-  <div class="dashboard">
-    <header>
-      <h1>AI Анализ МРТ - Дашборд</h1>
-      <div class="user-info">
-        <span>{{ authStore.user?.email }}</span>
-        <button @click="handleLogout">Выйти</button>
-      </div>
-    </header>
-    
-    <main>
-      <div class="dashboard-content">
-        <h2>Добро пожаловать в систему анализа медицинских изображений</h2>
-        <p>Система предоставляет возможности для анализа опухолей на основе ML алгоритмов</p>
-        
-        <div class="feature-cards">
-          <div class="feature-card">
-            <div class="card-icon">🧠</div>
-            <h3>ML Анализ</h3>
-            <p>Анализ медицинских изображений с помощью нейронных сетей</p>
-            <router-link to="/ml-analysis" class="card-button">
-              Перейти к анализу
-            </router-link>
+  <div class="dashboard-view">
+    <section class="page-header">
+      <h1>Оперативный контроль исследований КТ органов грудной клетки</h1>
+      <p>
+        Загрузите ZIP с DICOM-срезами, проверьте результат классификации и передайте заключение врачу-куратору.
+      </p>
+    </section>
+
+    <section class="primary-action">
+      <Card class="upload-card">
+        <template #title>Загрузка и анализ исследования</template>
+        <template #subtitle>
+          Поддерживается пакетная загрузка архивов. Система автоматически выполняет проверку целостности файлов и сообщает
+          о ходе анализа.
+        </template>
+        <template #content>
+          <ul class="card-points">
+            <li>Рекомендованный формат: ZIP ≤ 250 МБ, полный набор DICOM-срезов.</li>
+            <li>Итоговая классификация: «норма» или «патология» с указанием уровня уверенности модели.</li>
+            <li>Статус обработки отображается в журнале, уведомления приходят на корпоративную почту.</li>
+          </ul>
+        </template>
+        <template #footer>
+          <div class="card-actions">
+            <Button label="Перейти к загрузке" icon="pi pi-cloud-upload" size="large" @click="goToAnalysis" />
           </div>
-          
-          <div class="feature-card">
-            <div class="card-icon">📊</div>
-            <h3>Статистика</h3>
-            <p>Просмотр статистики и истории анализов</p>
-            <button class="card-button" disabled>
-              Скоро
-            </button>
-          </div>
-          
-          <div class="feature-card">
-            <div class="card-icon">⚙️</div>
-            <h3>Настройки</h3>
-            <p>Конфигурация системы и профиля пользователя</p>
-            <button class="card-button" disabled>
-              Скоро
-            </button>
-          </div>
-        </div>
-      </div>
-    </main>
+        </template>
+      </Card>
+    </section>
+
+    <section class="support-grid">
+      <Card class="info-card">
+        <template #title>Требования к данным</template>
+        <template #content>
+          <p>
+            Перед загрузкой убедитесь, что архив содержит последовательные серии КТ ОГК и корректные заголовки исследования.
+            Удалите персональные данные пациента или используйте анонимизатор PACS.
+          </p>
+        </template>
+      </Card>
+      <Card class="info-card">
+        <template #title>Регламент использования</template>
+        <template #content>
+          <p>
+            Результаты модели не заменяют врачебное заключение. Пожалуйста, сохраняйте протокол проверки и подтверждайте
+            решения, прежде чем передавать их в ЕГИСЗ.
+          </p>
+        </template>
+      </Card>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
+import Card from 'primevue/card';
+import Button from 'primevue/button';
 
 const router = useRouter();
-const authStore = useAuthStore();
 
-const handleLogout = () => {
-  authStore.logout();
-  router.push('/login');
+const goToAnalysis = () => {
+  router.push('/ml-analysis');
 };
 </script>
 
 <style scoped>
-.dashboard {
-  min-height: 100vh;
-}
-
-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  background: #f8f9fa;
-  border-bottom: 1px solid #ddd;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.user-info button {
-  padding: 8px 16px;
-  background: #dc3545;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-main {
-  padding: 40px 20px;
-}
-
-.dashboard-content {
-  max-width: 1200px;
-  margin: 0 auto;
-  text-align: center;
-}
-
-.dashboard-content h2 {
-  color: #374151;
-  margin-bottom: 12px;
-  font-size: 28px;
-}
-
-.dashboard-content > p {
-  color: #6b7280;
-  font-size: 16px;
-  margin-bottom: 40px;
-}
-
-.feature-cards {
+.dashboard-view {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  margin-top: 40px;
+  grid-template-columns: 1fr;
+  gap: 32px;
+  color: #0f172a;
 }
 
-.feature-card {
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 32px 24px;
-  text-align: center;
-  transition: all 0.3s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+.page-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 720px;
+  text-align: start;
 }
 
-.feature-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.page-header h1 {
+  margin: 0;
+  font-size: 1.9rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
-.card-icon {
-  font-size: 48px;
-  margin-bottom: 16px;
+.page-header p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #475569;
 }
 
-.feature-card h3 {
-  color: #374151;
-  margin-bottom: 12px;
-  font-size: 20px;
+.primary-action {
+  text-align: start; 
 }
 
-.feature-card p {
-  color: #6b7280;
-  margin-bottom: 24px;
-  line-height: 1.5;
+.upload-card :deep(.p-card-title) {
+  font-size: 1.4rem;
+  font-weight: 600;
 }
 
-.card-button {
-  display: inline-block;
-  padding: 12px 24px;
-  background-color: #3b82f6;
-  color: white;
-  text-decoration: none;
-  border: none;
-  border-radius: 8px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
+.upload-card :deep(.p-card-subtitle) {
+  color: #52627a;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
 
-.card-button:hover:not(:disabled) {
-  background-color: #2563eb;
+.card-points {
+  margin: 0;
+  padding-left: 20px;
+  color: #334155;
+  line-height: 1.6;
+  font-size: 0.95rem;
 }
 
-.card-button:disabled {
-  background-color: #d1d5db;
-  color: #9ca3af;
-  cursor: not-allowed;
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.support-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.info-card :deep(.p-card-title) {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.info-card :deep(.p-card-body) {
+  padding-top: 1.25rem;
+}
+
+.info-card p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #475569;
 }
 </style>
-
