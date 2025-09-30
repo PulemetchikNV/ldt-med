@@ -21,10 +21,12 @@ export class MLService {
             timeout: Number(process.env['ML_TIMEOUT_MS'] || 1200000)
         };
         const analyzeUrl = process.env['ML_ANALYZE_URL'];
+        const dicomClassifyUrl = process.env['ML_DICOM_CLASSIFY_URL'];
 
         this.config = {
             ...defaultConfig,
             ...(analyzeUrl && { analyzeUrl }),
+            ...(dicomClassifyUrl && { dicomClassifyUrl }),
             ...config
         };
     }
@@ -72,7 +74,7 @@ export class MLService {
             contentType: 'application/dicom'
         });
 
-        const response = await fetch(`${this.config.baseUrl}/classify-dicom/`, {
+        const response = await fetch(`${this.config.dicomClassifyUrl}`, {
             method: 'POST',
             body: formData as any,
             headers: formData.getHeaders(),

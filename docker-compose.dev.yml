@@ -58,6 +58,8 @@ services:
       # ML Service configuration
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_TIMEOUT_MS=${ML_TIMEOUT_MS:-1200000}
+      - ML_ANALYZE_URL=http://83.151.2.50:9175/analyze
+      - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-dicom/
     depends_on:
       - postgres
       - ml-service
@@ -103,9 +105,9 @@ services:
       - MODEL_PATH=/app/best_model.pth
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    gpus:
-      - count: all
-        capabilities: [gpu]
+    # gpus:
+    #   - count: all
+    #     capabilities: [gpu]
     networks:
       - app-network
 

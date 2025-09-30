@@ -3,7 +3,7 @@ import { useAuthStore } from '../stores/auth';
 import Login from '../views/Login.vue';
 import Register from '../views/Register.vue';
 import Dashboard from '../views/Dashboard.vue';
-import MLAnalysis from '../views/MLAnalysis.vue';
+import DicomInsights from '../views/DicomInsights.vue';
 
 const routes = [
     { path: '/', redirect: '/dashboard' },
@@ -16,7 +16,7 @@ const routes = [
     },
     {
         path: '/ml-analysis',
-        component: MLAnalysis,
+        component: DicomInsights,
         meta: { requiresAuth: true }
     }
 ];
@@ -39,4 +39,3 @@ router.beforeEach((to, from, next) => {
 });
 
 export default router;
-

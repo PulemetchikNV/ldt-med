@@ -51,6 +51,8 @@ services:
       - IS_IMAGE_GENERATION_ENABLED=${IS_IMAGE_GENERATION_ENABLED:-true}
       # ML Service configuration
       - ML_SERVICE_URL=http://ml-service:8000
+      - ML_ANALYZE_URL=http://83.151.2.50:9175/analyze
+      - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-dicom/
     depends_on:
       - postgres
       - ml-service

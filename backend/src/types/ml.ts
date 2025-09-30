@@ -38,6 +38,7 @@ export type VolumeType = 'original' | 'mask';
 export interface MLServiceConfig {
     baseUrl: string;
     analyzeUrl?: string;
+    dicomClassifyUrl?: string;
     timeout: number;
 }
 

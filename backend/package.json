@@ -19,13 +19,13 @@
         "fastify": "^5.6.0",
         "fastify-keycloak-adapter": "^3.0.2",
         "form-data": "^4.0.0",
-        "jsonwebtoken": "^9.0.2",
-        "prisma": "^6.16.2"
+        "jsonwebtoken": "^9.0.2"
     },
     "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
         "@types/form-data": "^2.5.0",
         "@types/node": "^20.10.0",
+        "prisma": "^6.16.2",
         "tsx": "^4.6.0",
         "typescript": "^5.3.0"
     },

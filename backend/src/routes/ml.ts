@@ -275,53 +275,6 @@ export default async function mlRoutes(
     });
 
     /**
-     * POST /api/ml/classify-dicom - Классификация DICOM файла
-     */
-    fastify.post('/classify-dicom', {
-        preHandler: [fastify.authenticate]
-    }, async (request: FastifyRequest, reply: FastifyReply) => {
-        try {
-            const data = await request.file();
-
-            if (!data) {
-                return reply.code(400).send({ error: 'Файл не предоставлен' });
-            }
-
-            const filename = data.filename;
-            if (!filename.toLowerCase().endsWith('.dcm')) {
-                return reply.code(400).send({
-                    error: 'Поддерживаются только файлы формата DICOM (.dcm)'
-                });
-            }
-
-            const fileBuffer = await data.toBuffer();
-
-            fastify.log.info(`Обработка DICOM файла: ${filename}, размер: ${fileBuffer.length} байт`);
-
-            const result = await mlService.classifyDicom(fileBuffer, filename);
-
-            if ((result as any)?.error) {
-                return reply.code(400).send({
-                    error: 'Ошибка обработки ML сервиса',
-                    details: (result as any).error
-                });
-            }
-
-            return reply.code(200).send({
-                success: true,
-                data: result
-            });
-
-        } catch (error) {
-            fastify.log.error({ err: error }, 'Ошибка при классификации DICOM');
-            return reply.code(500).send({
-                error: 'Ошибка при классификации файла',
-                details: error instanceof Error ? error.message : 'Неизвестная ошибка'
-            });
-        }
-    });
-
-    /**
      * POST /api/ml/predict/zip - Анализ ZIP архива с DICOM файлами
      */
     fastify.post('/predict/zip', {
