@@ -8,14 +8,18 @@
         "build": "tsc",
         "start": "node dist/server.js",
         "dev": "tsx watch src/server.ts",
-        "type-check": "tsc --noEmit"
+        "type-check": "tsc --noEmit",
+        "classify-to-xlsx": "tsx src/scripts/classifyToXlsx.ts"
     },
     "dependencies": {
         "@fastify/cors": "^11.1.0",
         "@fastify/jwt": "^10.0.0",
         "@fastify/multipart": "^9.2.1",
         "@prisma/client": "^6.16.2",
+        "adm-zip": "^0.5.10",
         "bcryptjs": "^3.0.2",
+        "dicom-parser": "^1.8.11",
+        "exceljs": "^4.4.0",
         "fastify": "^5.6.0",
         "fastify-keycloak-adapter": "^3.0.2",
         "form-data": "^4.0.0",

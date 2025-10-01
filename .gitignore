@@ -105,6 +105,10 @@ venv.bak/
 # Test data
 test_data/
 !test_data/.gitkeep
+reports/
+!reports/.gitkeep
+datasets/
+!datasets/.gitkeep
 
 # Docker
 .dockerignore

@@ -47,6 +47,14 @@ export interface MLAnalyzeResponse {
     error?: string;
 }
 
+export interface MLClassifyDicomPayload {
+    prediction?: number | string;
+    max_pathology_probability?: string;
+    [key: string]: unknown;
+}
+
 export interface MLClassifyDicomResponse {
-    [key: string]: string;
+    success?: boolean;
+    data?: MLClassifyDicomPayload;
+    [key: string]: unknown;
 }

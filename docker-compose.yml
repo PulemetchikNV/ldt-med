@@ -43,8 +43,6 @@ services:
       - HOST=0.0.0.0
       - NODE_ENV=${NODE_ENV:-development}
       - DATABASE_URL=${DATABASE_URL}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - TRANSCRIPTION_URL=${TRANSCRIPTION_URL}
       - ENABLE_AI_RESPONSE=${ENABLE_AI_RESPONSE:-true}
       - IS_PROXY_API_ENABLED=${IS_PROXY_API_ENABLED:-false}
       - PROXY_API_KEY=${PROXY_API_KEY}
@@ -52,7 +50,7 @@ services:
       # ML Service configuration
       - ML_SERVICE_URL=http://ml-service:8000
       - ML_ANALYZE_URL=http://83.151.2.50:9175/analyze
-      - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-dicom/
+      - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-study/
     depends_on:
       - postgres
       - ml-service
