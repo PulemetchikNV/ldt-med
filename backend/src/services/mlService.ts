@@ -99,12 +99,6 @@ export class MLService {
      * Классификация DICOM файла
      */
     async classifyDicom(fileBuffer: Buffer, filename: string): Promise<MLClassifyDicomResponse> {
-        const formData = new FormData();
-        formData.append('file', fileBuffer, {
-            filename,
-            contentType: 'application/dicom'
-        });
-
         const url = `${this.config.dicomClassifyUrl}`;
 
         // Логи запроса
@@ -114,11 +108,34 @@ export class MLService {
                 file: { filename, size: fileBuffer.length }
             });
         } catch {}
+        const inferredContentType = (() => {
+            const lower = filename.toLowerCase();
+            if (lower.endsWith('.zip')) {
+                return 'application/x-zip-compressed';
+            }
+            if (lower.endsWith('.dcm')) {
+                return 'application/dicom';
+            }
+            return 'application/octet-stream';
+        })();
+
+        const boundary = '----ml-boundary-' + Math.random().toString(36).slice(2);
+        const prefix = Buffer.from(
+            `--${boundary}\r\n` +
+            `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
+            `Content-Type: ${inferredContentType}\r\n\r\n`
+        );
+        const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
+        const body = Buffer.concat([prefix, fileBuffer, suffix]);
 
         const response = await fetch(url, {
             method: 'POST',
-            body: formData as any,
-            headers: formData.getHeaders(),
+            body,
+            headers: {
+                'Content-Type': `multipart/form-data; boundary=${boundary}`,
+                'Content-Length': String(body.length),
+                Accept: 'application/json'
+            },
             signal: AbortSignal.timeout(this.config.timeout)
         });
 

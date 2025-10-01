@@ -233,6 +233,7 @@ export default async function mlRoutes(
     fastify.post('/classify-dicom', {
         preHandler: [fastify.authenticate]
     }, async (request: FastifyRequest, reply: FastifyReply) => {
+        console.log('CLASSIFY DICOM');
         try {
             const data = await request.file();
 
@@ -241,9 +242,10 @@ export default async function mlRoutes(
             }
 
             const filename = data.filename;
-            if (!filename.toLowerCase().endsWith('.dcm')) {
+            const supportedExtensions = ['.dcm', '.zip'];
+            if (!supportedExtensions.some(ext => filename.toLowerCase().endsWith(ext))) {
                 return reply.code(400).send({
-                    error: 'Поддерживаются только файлы формата DICOM (.dcm)'
+                    error: 'Поддерживаются только файлы формата DICOM (.dcm) и ZIP (.zip)'
                 });
             }
 

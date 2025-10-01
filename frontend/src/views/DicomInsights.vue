@@ -3,10 +3,10 @@
     <div class="content-wrapper">
       <Card class="intro-card">
         <template #title>
-          <h4 class="card-title">Анализ одиночного DICOM файла</h4>
+          <h4 class="card-title">Анализ DICOM файлов</h4>
         </template>
         <template #subtitle>
-          <p class="card-subtitle">Загрузите файл формата .dcm, укажите запрос для ML модели и получите текстовый анализ вместе с вероятностями классов.</p>
+          <p class="card-subtitle">Загрузите файл формата .dcm или .zip архив с DICOM-файлами, укажите запрос для ML модели и получите текстовый анализ вместе с вероятностями классов.</p>
         </template>
         <template #content>
           <div class="form-grid">
@@ -14,9 +14,9 @@
               <label for="dicom-file">Выберите файл</label>
               <FileUploaderNew
                 id="dicom-file"
-                accept=".dcm"
+                accept=".dcm,.zip"
                 :auto="false"
-                :max-file-size="52428800 * 3"
+                :max-file-size="52428800 * 10"
                 @select="onFileSelect"
                 :disabled="isLoading"
               />
@@ -70,7 +70,7 @@
             </div>
 
             <div v-else class="results-grid">
-              <Card class="analysis-card">
+              <Card class="analysis-card" v-if="FEATURE_FLAGS.ENABLE_ANALYZE_API">
                 <template #header>
                   <div class="section-header">
                     <span class="section-label">
@@ -88,26 +88,31 @@
                 </template>
               </Card>
 
-              <Card class="analysis-card">
+              <Card class="analysis-card" v-if="FEATURE_FLAGS.ENABLE_CLASSIFY_DICOM_API">
                 <template #header>
                   <div class="section-header">
                     <span class="section-label">
-                      <i class="pi pi-chart-bar"></i>
-                      Классификация
+                      <i class="pi pi-chart-line"></i>
+                      Итог классификации
                     </span>
-                    <Tag value="/api/ml/classify-dicom" severity="success" />
                   </div>
                 </template>
                 <template #content>
-                  <DataTable
-                    v-if="classificationRows.length"
-                    :value="classificationRows"
-                    size="small"
-                    class="classification-table"
+                  <div
+                    v-if="classificationSummary"
+                    class="classification-summary"
+                    :class="classificationSummary.variant"
                   >
-                    <Column field="label" header="Класс" />
-                    <Column field="probability" header="Вероятность" />
-                  </DataTable>
+                    <div class="summary-header">
+                      <span class="summary-title">{{ classificationSummary.title }}</span>
+                      <Tag :severity="classificationSummary.tagSeverity" :value="classificationSummary.tag" />
+                    </div>
+                    <p class="summary-text">{{ classificationSummary.description }}</p>
+                    <div class="confidence-meter">
+                      <span>Уверенность модели</span>
+                      <ProgressBar :value="classificationSummary.confidenceValue" show-value />
+                    </div>
+                  </div>
                   <p v-else class="empty-state">Нет данных классификации</p>
                 </template>
               </Card>
@@ -121,18 +126,18 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { axiosInstance } from '../plugins/axios';
-import type { MLAnalyzeResult, MLClassifyDicomResult } from '../services/mlApi';
+import { MLApiService, type MLAnalyzeResult, type MLClassifyDicomResult } from '../services/mlApi';
+import { FEATURE_FLAGS } from '../__data__/const';
 import Card from 'primevue/card';
 import Button from 'primevue/button';
 import FileUploaderNew from '../components/FileUploaderNew.vue';
 import Textarea from 'primevue/textarea';
 import Message from 'primevue/message';
 import Tag from 'primevue/tag';
-import DataTable from 'primevue/datatable';
-import Column from 'primevue/column';
 import ProgressSpinner from 'primevue/progressspinner';
-import { AxiosError } from 'axios';
+import ProgressBar from 'primevue/progressbar';
+
+const mlApi = new MLApiService();
 
 const selectedFile = ref<File | null>(null);
 const textPrompt = ref('Опиши ключевые патологии, которые ты видишь на снимке, и возможные рекомендации.');
@@ -144,12 +149,23 @@ const errorMessage = ref<string | null>(null);
 const selectedFileName = computed(() => selectedFile.value?.name ?? '');
 const hasResult = computed(() => Boolean(analyzeResult.value || classifyResult.value));
 
-const classificationRows = computed(() => {
-  if (!classifyResult.value) return [] as Array<{ label: string; probability: string }>;
-  return Object.entries(classifyResult.value.data).map(([label, probability]) => ({
-    label,
-    probability
-  }));
+const classificationSummary = computed(() => {
+  const result = classifyResult.value?.data;
+  if (!result) return null;
+
+  const confidence = parseFloat(result.max_pathology_probability?.replace('%', '') ?? '0');
+  const isPathology = Number(result.prediction) === 1;
+
+  return {
+    variant: isPathology ? 'is-pathology' : 'is-normal',
+    title: isPathology ? 'Вероятна патология' : 'Признаки патологии не обнаружены',
+    description: isPathology
+      ? 'Модель сигнализирует о потенциальных отклонениях. Рекомендуется детальный просмотр срезов и подготовка заключения.'
+      : 'Исследование соответствует норме по мнению модели. Проверьте ключевые серии для окончательного подтверждения.',
+    tag: isPathology ? 'Патология' : 'Норма',
+    tagSeverity: isPathology ? 'danger' : 'success',
+    confidenceValue: Math.max(0, Math.min(confidence, 100)),
+  };
 });
 
 const canSubmit = computed(() => Boolean(selectedFile.value && textPrompt.value.trim()));
@@ -185,36 +201,32 @@ const runAnalysis = async () => {
   const file = selectedFile.value;
   const prompt = textPrompt.value.trim();
 
-  const analyzeForm = new FormData();
-  analyzeForm.append('text_prompt', prompt);
-  analyzeForm.append('file', file);
-
-  const classifyForm = new FormData();
-  classifyForm.append('file', file);
-
   try {
-    const [analyzeResponse, classifyResponse] = await Promise.all([
-      axiosInstance.post<MLAnalyzeResult>('/api/ml/analyze', analyzeForm, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      }),
-      axiosInstance.post<MLClassifyDicomResult>('/api/ml/classify-dicom', classifyForm, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      })
-    ]);
+    const promises = [];
 
-    analyzeResult.value = analyzeResponse.data;
-    classifyResult.value = classifyResponse.data;
-  } catch (err) {
-    const error = err as AxiosError<{ message?: string; error?: string }>;
-    if (error.response?.data?.message) {
-      errorMessage.value = error.response.data.message;
-    } else if (error.response?.data?.error) {
-      errorMessage.value = error.response.data.error;
-    } else if (error.message) {
-      errorMessage.value = error.message;
+    if (FEATURE_FLAGS.ENABLE_ANALYZE_API) {
+      promises.push(mlApi.analyze(prompt, file));
     } else {
-      errorMessage.value = 'Не удалось выполнить запросы. Попробуйте позже.';
+      promises.push(Promise.resolve(null));
     }
+
+    if (FEATURE_FLAGS.ENABLE_CLASSIFY_DICOM_API) {
+      promises.push(mlApi.classifyDicom(file));
+    } else {
+      promises.push(Promise.resolve(null));
+    }
+
+    const [analyzeResponse, classifyResponse] = await Promise.all(promises);
+
+    if (analyzeResponse) {
+      analyzeResult.value = analyzeResponse as MLAnalyzeResult;
+    }
+    if (classifyResponse) {
+      classifyResult.value = classifyResponse as MLClassifyDicomResult;
+    }
+  } catch (err) {
+    const error = err as Error;
+    errorMessage.value = error.message || 'Не удалось выполнить запросы. Попробуйте позже.';
   } finally {
     isLoading.value = false;
   }
@@ -282,6 +294,7 @@ label {
 .results-wrapper {
   display: flex;
   flex-direction: column;
+  text-align: start;
 }
 
 .loading-state {
@@ -298,11 +311,11 @@ label {
   gap: 1.5rem;
 }
 
-@media (min-width: 768px) {
+/* @media (min-width: 768px) {
   .results-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-}
+} */
 
 .section-header {
   display: flex;
@@ -331,16 +344,68 @@ label {
   font-style: italic;
 }
 
-.classification-table :deep(.p-datatable-header) {
-  display: none;
+.classification-summary {
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f1f5f9 0%, #f8fafc 100%);
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.classification-table :deep(.p-datatable-thead > tr > th) {
-  background: #f3f4f6;
-  color: #4b5563;
+.classification-summary.is-normal {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(59, 130, 246, 0.08) 100%);
 }
 
-.classification-table :deep(.p-datatable-tbody > tr > td) {
-  border-bottom: 1px solid #e5e7eb;
+.classification-summary.is-pathology {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, rgba(248, 113, 113, 0.15) 0%, rgba(249, 115, 22, 0.12) 100%);
+}
+
+.summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.summary-title {
+  font-weight: 600;
+  font-size: 1.15rem;
+  color: #0f172a;
+}
+
+.summary-text {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.confidence-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  color: #475569;
+}
+
+.confidence-meter span {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.confidence-meter :deep(.p-progressbar) {
+  height: 1.75rem;
+  border-radius: 999px;
+}
+
+.confidence-meter :deep(.p-progressbar-value) {
+  border-radius: 999px;
+}
+
+.confidence-meter :deep(.p-progressbar-label) {
+  font-weight: 600;
 }
 </style>

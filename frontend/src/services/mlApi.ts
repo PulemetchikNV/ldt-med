@@ -85,25 +85,9 @@ export interface AnalysisRecord {
     metadata?: unknown;
 }
 
+import { axiosInstance } from '../plugins/axios';
+
 export class MLApiService {
-    private baseUrl: string;
-
-    constructor() {
-        this.baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    }
-
-    private requireToken(): string {
-        const token = localStorage.getItem('token');
-        if (!token) {
-            throw new Error('Требуется авторизация');
-        }
-        return token;
-    }
-
-    private authHeaders(): HeadersInit {
-        return { Authorization: `Bearer ${this.requireToken()}` };
-    }
-
     /**
      * Анализ с текстовым промптом (и опционально файлом)
      */
@@ -114,18 +98,12 @@ export class MLApiService {
             formData.append('file', file);
         }
 
-        const response = await fetch(`${this.baseUrl}/api/ml/analyze`, {
-            method: 'POST',
-            body: formData,
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при выполнении анализа');
+        try {
+            const response = await axiosInstance.post<MLAnalyzeResult>('/api/ml/analyze', formData);
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при выполнении анализа');
         }
-
-        return response.json();
     }
 
     /**
@@ -135,18 +113,15 @@ export class MLApiService {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${this.baseUrl}/api/ml/classify-dicom`, {
-            method: 'POST',
-            body: formData,
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при классификации DICOM файла');
+        try {
+            const response = await axiosInstance.post<MLClassifyDicomResult>(
+                '/api/ml/classify-dicom',
+                formData
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при классификации DICOM файла');
         }
-
-        return response.json();
     }
 
     /**
@@ -156,18 +131,15 @@ export class MLApiService {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${this.baseUrl}/api/ml/predict/nifti`, {
-            method: 'POST',
-            body: formData,
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при анализе NIfTI файла');
+        try {
+            const response = await axiosInstance.post<MLPredictionResult>(
+                '/api/ml/predict/nifti',
+                formData
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при анализе NIfTI файла');
         }
-
-        return response.json();
     }
 
     /**
@@ -177,18 +149,15 @@ export class MLApiService {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch(`${this.baseUrl}/api/ml/predict/zip`, {
-            method: 'POST',
-            body: formData,
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при анализе ZIP архива');
+        try {
+            const response = await axiosInstance.post<MLPredictionResult>(
+                '/api/ml/predict/zip',
+                formData
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при анализе ZIP архива');
         }
-
-        return response.json();
     }
 
     /**
@@ -199,32 +168,26 @@ export class MLApiService {
         volumeType: 'original' | 'mask',
         sliceIndex: number
     ): Promise<MLSliceResult> {
-        const response = await fetch(
-            `${this.baseUrl}/api/ml/slice/${patientId}/${volumeType}/${sliceIndex}`
-        , {
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при получении среза');
+        try {
+            const response = await axiosInstance.get<MLSliceResult>(
+                `/api/ml/slice/${patientId}/${volumeType}/${sliceIndex}`
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при получении среза');
         }
-
-        return response.json();
     }
 
     /**
      * Проверка состояния ML сервиса
      */
     async healthCheck(): Promise<MLHealthResult> {
-        const response = await fetch(`${this.baseUrl}/api/ml/health`);
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'ML сервис недоступен');
+        try {
+            const response = await axiosInstance.get<MLHealthResult>('/api/ml/health');
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'ML сервис недоступен');
         }
-
-        return response.json();
     }
 
     /**
@@ -234,18 +197,17 @@ export class MLApiService {
         patientId: string,
         volumeType: 'original' | 'mask' = 'original'
     ): Promise<MLVolumeMeta> {
-        const response = await fetch(
-            `${this.baseUrl}/api/ml/volume/${patientId}/meta?volume_type=${volumeType}`
-        , {
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при получении метаданных объема');
+        try {
+            const response = await axiosInstance.get<MLVolumeMeta>(
+                `/api/ml/volume/${patientId}/meta`,
+                {
+                    params: { volume_type: volumeType }
+                }
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при получении метаданных объема');
         }
-
-        return response.json();
     }
 
     /**
@@ -265,55 +227,36 @@ export class MLApiService {
             scale?: number;
         }
     ): Promise<MLOrthogonalSlices> {
-        const searchParams = new URLSearchParams();
-        searchParams.set('i', params.i.toString());
-        searchParams.set('j', params.j.toString());
-        searchParams.set('k', params.k.toString());
-
-        if (params.modality) searchParams.set('modality', params.modality);
-        if (params.overlay) searchParams.set('overlay', params.overlay);
-        if (params.alpha !== undefined) searchParams.set('alpha', params.alpha.toString());
-        if (params.wl !== undefined) searchParams.set('wl', params.wl.toString());
-        if (params.ww !== undefined) searchParams.set('ww', params.ww.toString());
-        if (params.scale !== undefined) searchParams.set('scale', params.scale.toString());
-
-        const response = await fetch(
-            `${this.baseUrl}/api/ml/orthoslices/${patientId}?${searchParams.toString()}`
-        , {
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Ошибка при получении ортогональных срезов');
+        try {
+            const response = await axiosInstance.get<MLOrthogonalSlices>(
+                `/api/ml/orthoslices/${patientId}`,
+                { params }
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Ошибка при получении ортогональных срезов');
         }
-
-        return response.json();
     }
 
     async listAnalyses(): Promise<{ success: boolean; data: AnalysisRecord[] }> {
-        const response = await fetch(`${this.baseUrl}/api/ml/analyses`, {
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Не удалось получить список анализов');
+        try {
+            const response = await axiosInstance.get<{ success: boolean; data: AnalysisRecord[] }>(
+                '/api/ml/analyses'
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Не удалось получить список анализов');
         }
-
-        return response.json();
     }
 
     async getAnalysis(id: number): Promise<{ success: boolean; data: AnalysisRecord }> {
-        const response = await fetch(`${this.baseUrl}/api/ml/analyses/${id}`, {
-            headers: this.authHeaders()
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || 'Анализ не найден');
+        try {
+            const response = await axiosInstance.get<{ success: boolean; data: AnalysisRecord }>(
+                `/api/ml/analyses/${id}`
+            );
+            return response.data;
+        } catch (error: any) {
+            throw new Error(error.response?.data?.error || 'Анализ не найден');
         }
-
-        return response.json();
     }
 }
