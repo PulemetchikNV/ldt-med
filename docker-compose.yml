@@ -84,6 +84,6 @@ networks:
   app-network:
     driver: bridge
 
-volumes:
+# volumes:
   # certbot-etc:
   # certbot-www:
