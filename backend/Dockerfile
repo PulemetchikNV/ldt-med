@@ -4,13 +4,13 @@ WORKDIR /app
 
 # Установка зависимостей
 COPY package*.json ./
-RUN npm i --only=production
+RUN npm ci
 
 # Копирование исходного кода
 COPY . .
 
-# Сборка TypeScript
-RUN npm run build
+# Сборка проекта без проверки типов
+RUN npm run build && npm prune --production
 
 # Установка netcat для проверки доступности PostgreSQL
 RUN apk add --no-cache netcat-openbsd

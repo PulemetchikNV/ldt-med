@@ -5,7 +5,7 @@
     "main": "dist/server.js",
     "type": "module",
     "scripts": {
-        "build": "tsc",
+        "build": "swc src -d dist --source-maps",
         "start": "node dist/server.js",
         "dev": "tsx watch src/server.ts",
         "type-check": "tsc --noEmit",
@@ -29,6 +29,8 @@
         "@types/bcryptjs": "^2.4.6",
         "@types/form-data": "^2.5.0",
         "@types/node": "^20.10.0",
+        "@swc/cli": "^0.5.1",
+        "@swc/core": "^1.9.3",
         "prisma": "^6.16.2",
         "tsx": "^4.6.0",
         "typescript": "^5.3.0"
