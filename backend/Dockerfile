@@ -15,6 +15,9 @@ RUN npx prisma generate
 # Сборка проекта без проверки типов
 RUN npm run build
 
+# Копирование Prisma клиента в итоговую сборку
+RUN mkdir -p dist/generated && cp -r src/generated/prisma dist/generated/prisma
+
 # Удаление dev-зависимостей
 RUN npm prune --production
 # Установка netcat для проверки доступности PostgreSQL
