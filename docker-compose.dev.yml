@@ -86,23 +86,23 @@ services:
       - ./frontend:/app
       - /app/node_modules
   
-  ml-service:
-    build: ./ml
-    container_name: ldt-med-ml
-    restart: unless-stopped
-    ports:
-      - "${ML_PORT:-5001}:8000"
-    volumes:
-      - ./ml:/app
-    environment:
-      - MODEL_PATH=/app/best_model.pth
-      - NVIDIA_VISIBLE_DEVICES=all
-      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
-    # gpus:
-    #   - count: all
-    #     capabilities: [gpu]
-    networks:
-      - app-network
+  # ml-service:
+  #   build: ./ml
+  #   container_name: ldt-med-ml
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${ML_PORT:-5001}:8000"
+  #   volumes:
+  #     - ./ml:/app
+  #   environment:
+  #     - MODEL_PATH=/app/best_model.pth
+  #     - NVIDIA_VISIBLE_DEVICES=all
+  #     - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+  #   # gpus:
+  #   #   - count: all
+  #   #     capabilities: [gpu]
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:

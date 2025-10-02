@@ -91,18 +91,18 @@ services:
     networks:
       - app-network
 
-  ml-service:
-    build: ./ml
-    container_name: ${PROJECT_NAME:-ldt-med}-ml
-    restart: unless-stopped
-    ports:
-      - "${ML_PORT:-5001}:8000"
-    volumes:
-      - ./ml:/app
-    environment:
-      - MODEL_PATH=/app/best_model.pth
-    networks:
-      - app-network
+  # ml-service:
+  #   build: ./ml
+  #   container_name: ${PROJECT_NAME:-ldt-med}-ml
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${ML_PORT:-5001}:8000"
+  #   volumes:
+  #     - ./ml:/app
+  #   environment:
+  #     - MODEL_PATH=/app/best_model.pth
+  #   networks:
+  #     - app-network
       
   certbot:
     image: certbot/certbot
