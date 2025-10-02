@@ -2,14 +2,13 @@ import { promises as fs, Stats } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import AdmZip from 'adm-zip';
-import type { IZipEntry } from 'adm-zip';
 import dicomParser from 'dicom-parser';
 import ExcelJS from 'exceljs';
 import { MLService } from '../services/mlService.js';
 
 interface CliOptions {
   inputPath: string;
-  outputPath?: string;
+  outputPath: string | null;
 }
 
 interface ClassificationRow {
@@ -34,12 +33,15 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   let inputPath = '';
-  let outputPath: string | undefined;
+  let outputPath: string | null = null;
 
   for (let i = 0; i < rest.length; i += 1) {
     const token = rest[i];
+    if (!token) {
+      continue;
+    }
     if (token === '--out' || token === '-o') {
-      outputPath = rest[i + 1];
+      outputPath = rest[i + 1] ?? null;
       i += 1;
       continue;
     }
@@ -54,13 +56,13 @@ function parseArgs(argv: string[]): CliOptions {
   }
 
   const resolvedInput = path.resolve(process.cwd(), inputPath);
-  const options: CliOptions = { inputPath: resolvedInput };
+  const resolvedOutput =
+    outputPath !== null ? path.resolve(process.cwd(), outputPath) : null;
 
-  if (outputPath) {
-    options.outputPath = outputPath;
-  }
-
-  return options;
+  return {
+    inputPath: resolvedInput,
+    outputPath: resolvedOutput
+  } satisfies CliOptions;
 }
 
 async function ensureExists(targetPath: string): Promise<Stats> {
@@ -74,8 +76,13 @@ async function ensureExists(targetPath: string): Promise<Stats> {
 function extractDicomMetadata(buffer: Buffer): { studyUid: string | null; seriesUid: string | null } {
   try {
     const zip = new AdmZip(buffer);
-    const entries: IZipEntry[] = zip
-      .getEntries()
+    type ZipEntry = {
+      entryName: string;
+      isDirectory: boolean;
+      getData(): Buffer;
+    };
+
+    const entries = (zip.getEntries() as ZipEntry[])
       .filter((entry) => !entry.isDirectory && !entry.entryName.startsWith('__MACOSX'))
       .sort((a, b) => a.entryName.localeCompare(b.entryName));
 

@@ -9,13 +9,16 @@ RUN npm ci
 # Копирование исходного кода
 COPY . .
 
-# Сборка проекта без проверки типов
-RUN npm run build && npm prune --production
+# Генерация Prisma клиента
+RUN npx prisma generate
 
+# Сборка проекта без проверки типов
+RUN npm run build
+
+# Удаление dev-зависимостей
+RUN npm prune --production
 # Установка netcat для проверки доступности PostgreSQL
 RUN apk add --no-cache netcat-openbsd
-
-RUN npx prisma generate
 
 EXPOSE 3000
 
