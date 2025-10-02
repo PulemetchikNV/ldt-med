@@ -1,5 +1,5 @@
-import axios from "axios";
-import { useAuthStore } from '../stores/auth'
+import axios from 'axios';
+import { useAuthStore } from '../stores/auth';
 
 console.log('AXIOS INIT', import.meta.env.VITE_API_URL);
 
@@ -7,6 +7,8 @@ console.log('AXIOS INIT', import.meta.env.VITE_API_URL);
 export const axiosInstance = axios.create({
     baseURL: (import.meta as any).env?.VITE_API_URL || (window as any).__VITE_API_URL__ || '/'
 })
+
+axiosInstance.defaults.withCredentials = true;
 
 axiosInstance.interceptors.request.use((config) => {
     const token = useAuthStore().token
@@ -25,4 +27,3 @@ axiosInstance.interceptors.response.use(
         return Promise.reject(error);
     }
 )
-
