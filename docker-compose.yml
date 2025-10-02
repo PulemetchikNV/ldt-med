@@ -24,8 +24,6 @@ services:
       - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-study/
     networks:
       - app-network
-    volumes:
-      - ./backend:/app
 
   frontend:
     build:
