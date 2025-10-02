@@ -6,6 +6,7 @@
     "type": "module",
     "scripts": {
         "build": "tsc",
+        "postbuild": "node scripts/copy-prisma.js",
         "start": "node dist/server.js",
         "dev": "tsx watch src/server.ts",
         "type-check": "tsc --noEmit",
