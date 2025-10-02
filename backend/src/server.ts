@@ -12,8 +12,23 @@ const fastify: FastifyInstance = Fastify({
 });
 
 // Регистрируем плагины
+const defaultOrigins = [
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://5.181.252.53:8080'
+];
+
+const extraOrigins = (process.env['FRONTEND_ORIGINS'] ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+
+const allowedOrigins = Array.from(new Set([...defaultOrigins, ...extraOrigins]));
+
 fastify.register(cors, {
-    origin: ['http://localhost:8080', 'http://127.0.0.1:8080', 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 });
