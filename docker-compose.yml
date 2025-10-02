@@ -53,9 +53,9 @@ services:
       - VITE_KEYCLOAK_ISSUER=${VITE_KEYCLOAK_ISSUER}
     depends_on:
       - backend
-    volumes:
-      - certbot-etc:/etc/letsencrypt
-      - certbot-www:/var/www/certbot
+    # volumes:
+      # - certbot-etc:/etc/letsencrypt
+      # - certbot-www:/var/www/certbot
     networks:
       - app-network
 
