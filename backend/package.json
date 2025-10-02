@@ -2,11 +2,11 @@
     "name": "ldt-med-backend",
     "version": "1.0.0",
     "description": "Backend сервер для LDT Medical на Fastify",
-    "main": "dist/src/server.js",
+    "main": "dist/server.js",
     "type": "module",
     "scripts": {
-        "build": "swc src -d dist --source-maps",
-        "start": "node dist/src/server.js",
+        "build": "tsc",
+        "start": "node dist/server.js",
         "dev": "tsx watch src/server.ts",
         "type-check": "tsc --noEmit",
         "classify-to-xlsx": "tsx src/scripts/classifyToXlsx.ts"
@@ -27,10 +27,9 @@
     },
     "devDependencies": {
         "@types/bcryptjs": "^2.4.6",
+        "@types/adm-zip": "^0.5.5",
         "@types/form-data": "^2.5.0",
         "@types/node": "^20.10.0",
-        "@swc/cli": "^0.5.1",
-        "@swc/core": "^1.9.3",
         "prisma": "^6.16.2",
         "tsx": "^4.6.0",
         "typescript": "^5.3.0"

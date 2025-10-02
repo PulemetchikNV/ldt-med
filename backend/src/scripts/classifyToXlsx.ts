@@ -2,6 +2,7 @@ import { promises as fs, Stats } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import AdmZip from 'adm-zip';
+import type { IZipEntry } from 'adm-zip';
 import dicomParser from 'dicom-parser';
 import ExcelJS from 'exceljs';
 import { MLService } from '../services/mlService.js';
@@ -52,7 +53,14 @@ function parseArgs(argv: string[]): CliOptions {
     throw new Error('Не удалось определить входной путь.');
   }
 
-  return { inputPath: path.resolve(process.cwd(), inputPath), outputPath };
+  const resolvedInput = path.resolve(process.cwd(), inputPath);
+  const options: CliOptions = { inputPath: resolvedInput };
+
+  if (outputPath) {
+    options.outputPath = outputPath;
+  }
+
+  return options;
 }
 
 async function ensureExists(targetPath: string): Promise<Stats> {
@@ -66,7 +74,7 @@ async function ensureExists(targetPath: string): Promise<Stats> {
 function extractDicomMetadata(buffer: Buffer): { studyUid: string | null; seriesUid: string | null } {
   try {
     const zip = new AdmZip(buffer);
-    const entries = zip
+    const entries: IZipEntry[] = zip
       .getEntries()
       .filter((entry) => !entry.isDirectory && !entry.entryName.startsWith('__MACOSX'))
       .sort((a, b) => a.entryName.localeCompare(b.entryName));
