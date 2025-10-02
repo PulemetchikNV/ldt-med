@@ -1,37 +1,6 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:latest
-    container_name: ${PROJECT_NAME:-ldt-med}-postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-ldt_med_db}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - app-network
-
-  pgadmin:
-    container_name: ${PROJECT_NAME:-ldt-med}-pgadmin
-    image: dpage/pgadmin4:7
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@admin.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-root}
-    ports:
-      - "${PGADMIN_PORT:-5050}:80"
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    networks:
-      - app-network
-    depends_on:
-      - postgres
-
   backend:
     build:
       context: ./backend
@@ -53,9 +22,6 @@ services:
       - ML_TIMEOUT_MS=${ML_TIMEOUT_MS:-1200000}
       - ML_ANALYZE_URL=http://83.151.2.50:9175/analyze
       - ML_DICOM_CLASSIFY_URL=http://83.151.2.50:9174/classify-study/
-    depends_on:
-      - postgres
-      - ml-service
     networks:
       - app-network
     volumes:
@@ -107,7 +73,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  postgres-data: 
-  pgadmin-data:
