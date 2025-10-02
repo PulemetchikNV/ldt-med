@@ -23,6 +23,9 @@ const LightPreset = definePreset(Aura, {
 
 const theme = {
   preset: LightPreset,
+  options: {
+    darkModeSelector: false,
+  }
 }
 
 export default theme
